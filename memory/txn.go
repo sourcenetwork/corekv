@@ -33,7 +33,7 @@ type basicTxn struct {
 	closeLk sync.RWMutex
 }
 
-// var _ ds.Txn = (*basicTxn)(nil)
+var _ corekv.Txn = (*basicTxn)(nil)
 
 func (t *basicTxn) getDSVersion() uint64 {
 	return atomic.LoadUint64(t.dsVersion)
@@ -173,6 +173,147 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 	return nil
 }
 
+func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
+	if opts.Prefix != nil {
+		return &txnIterator{
+			opts:      opts,
+			txnIter:   newPrefixIter(t.ops, opts.Prefix, opts.Reverse, t.getTxnVersion()),
+			storeIter: newPrefixIter(t.ds.values, opts.Prefix, opts.Reverse, t.getDSVersion()),
+		}
+	}
+
+	return &txnIterator{
+		opts:      opts,
+		txnIter:   newRangeIter(t.ops, opts.Start, opts.End, opts.Reverse, t.getTxnVersion()),
+		storeIter: newRangeIter(t.ds.values, opts.Start, opts.End, opts.Reverse, t.getDSVersion()),
+	}
+}
+
+type txnIterator struct {
+	opts corekv.IterOptions
+
+	txnIter   *iterator
+	storeIter *iterator
+
+	pendingTxnKey   []byte
+	pendingStoreKey []byte
+
+	activeIter *iterator
+}
+
+var _ corekv.Iterator = (*txnIterator)(nil)
+
+func (iter *txnIterator) Next() (bool, error) {
+	txnHasNext := len(iter.pendingTxnKey) != 0
+	if !txnHasNext {
+		var err error
+		txnHasNext, err = iter.txnIter.Next()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	storeHasNext := len(iter.pendingStoreKey) != 0
+	if !storeHasNext {
+		var err error
+		storeHasNext, err = iter.storeIter.Next()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return iter.selectIterator(txnHasNext, storeHasNext), nil
+}
+
+func (iter *txnIterator) Key() []byte {
+	if iter.activeIter == nil {
+		return nil
+	}
+	return iter.activeIter.Key()
+}
+
+func (iter *txnIterator) Value() ([]byte, error) {
+	if iter.activeIter == nil {
+		return nil, nil
+	}
+	return iter.activeIter.Value()
+}
+
+func (iter *txnIterator) Seek(key []byte) (bool, error) {
+	txnSeekOk, err := iter.txnIter.Seek(key)
+	if err != nil {
+		return false, err
+	}
+
+	storeSeekOk, err := iter.storeIter.Seek(key)
+	if err != nil {
+		return false, err
+	}
+
+	return iter.selectIterator(txnSeekOk, storeSeekOk), nil
+}
+
+// selectIterator selects the iterator to be used by the next `Key` or `Value` function calls
+// by mutating the internal `txnIterator` state.
+//
+// It returns false if there are no values to yield from the iterator.
+func (iter *txnIterator) selectIterator(hasPendingTxnKey bool, hasPendingStoreKey bool) bool {
+	if !hasPendingTxnKey && !hasPendingStoreKey {
+		return false
+	}
+
+	if !hasPendingTxnKey {
+		iter.activeIter = iter.storeIter
+		// Discard the pending key that we are progressing the iterator to.
+		// It is no longer pending, and it is very cheap to re-get if the consumer requests it.
+		iter.pendingStoreKey = nil
+		return true
+	}
+
+	if !hasPendingStoreKey {
+		iter.activeIter = iter.txnIter
+		// Discard the pending key that we are progressing the iterator to.
+		// It is no longer pending, and it is very cheap to re-get if the consumer requests it.
+		iter.pendingTxnKey = nil
+		return true
+	}
+
+	iter.pendingTxnKey = iter.txnIter.Key()
+	iter.pendingStoreKey = iter.storeIter.Key()
+
+	if (iter.opts.Reverse && gte(iter.pendingTxnKey, iter.pendingStoreKey)) ||
+		(!iter.opts.Reverse && lt(iter.pendingTxnKey, iter.pendingStoreKey)) {
+		iter.activeIter = iter.txnIter
+		// Discard the pending key that we are progressing the iterator to.
+		// It is no longer pending, and it is very cheap to re-get if the consumer requests it.
+		iter.pendingTxnKey = nil
+	} else {
+		iter.activeIter = iter.storeIter
+		// Discard the pending key that we are progressing the iterator to.
+		// It is no longer pending, and it is very cheap to re-get if the consumer requests it.
+		iter.pendingStoreKey = nil
+	}
+
+	return true
+}
+
+func (iter *txnIterator) Reset() {
+	iter.activeIter = nil
+	iter.pendingTxnKey = nil
+	iter.pendingStoreKey = nil
+	iter.txnIter.Reset()
+	iter.storeIter.Reset()
+}
+
+func (iter *txnIterator) Close() error {
+	err := iter.txnIter.Close()
+	if err != nil {
+		return err
+	}
+
+	return iter.storeIter.Close()
+}
+
 // Query implements ds.Query.
 // func (t *basicTxn) Query(ctx context.Context, q dsq.Query) (dsq.Results, error) {
 // 	t.closeLk.RLock()
@@ -249,18 +390,20 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 // }
 
 func (t *basicTxn) Close() error {
-	t.Discard()
-	return nil
+	return t.Discard()
 }
 
 // Discard removes all the operations added to the transaction.
-func (t *basicTxn) Discard() {
+func (t *basicTxn) Discard() error {
 	if t.discarded {
-		return
+		return nil
 	}
+
 	t.ops.Clear()
 	t.clearInFlightTxn()
 	t.discarded = true
+
+	return nil
 }
 
 // Commit saves the operations to the underlying datastore.

@@ -70,7 +70,7 @@ type Datastore struct {
 var _ corekv.Store = (*Datastore)(nil)
 
 // var _ corekv.Batchable = (*Datastore)(nil)
-// var _ corekv.TxnStore = (*Datastore)(nil)
+var _ corekv.TxnStore = (*Datastore)(nil)
 
 // NewDatastore constructs an empty Datastore.
 func NewDatastore(ctx context.Context) *Datastore {
@@ -189,15 +189,10 @@ func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error
 	return result.key != nil && !result.isDeleted, nil
 }
 
-// NewTransaction return a corekv.Txn datastore based on Datastore.
-// func (d *Datastore) NewTxn(ctx context.Context, readOnly bool) (corekv.Txn, error) {
-// 	d.closeLk.RLock()
-// 	defer d.closeLk.RUnlock()
-// 	if d.closed {
-// 		return nil, ErrClosed
-// 	}
-// 	return d.newTransaction(readOnly), nil
-// }
+// NewTxn return a corekv.Txn datastore based on Datastore.
+func (d *Datastore) NewTxn(readOnly bool) corekv.Txn {
+	return d.newTransaction(readOnly)
+}
 
 // newTransaction returns a corekv.Txn datastore.
 //
