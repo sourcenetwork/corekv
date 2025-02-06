@@ -148,8 +148,7 @@ type TxnStore interface {
 // and isolates changes made via this object from the underlying store
 // until `Commit` is called.
 type Txn interface {
-	Reader
-	Writer
+	Store
 
 	// Commit applies all changes made via this [Txn] to the underlying
 	// [Store].

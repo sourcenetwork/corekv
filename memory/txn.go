@@ -248,6 +248,11 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 // 	return e
 // }
 
+func (t *basicTxn) Close() error {
+	t.Discard()
+	return nil
+}
+
 // Discard removes all the operations added to the transaction.
 func (t *basicTxn) Discard() {
 	if t.discarded {
