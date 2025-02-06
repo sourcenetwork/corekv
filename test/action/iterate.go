@@ -54,5 +54,8 @@ func (a *Iterate) Execute(s *state.State) {
 		})
 	}
 
+	err := iterator.Close(s.Ctx)
+	require.NoError(s.T, err)
+
 	require.Equal(s.T, a.Expected, entries)
 }
