@@ -5,38 +5,23 @@ import (
 	"testing"
 
 	"github.com/sourcenetwork/corekv/test/action"
+	"github.com/sourcenetwork/corekv/test/multiplier"
 	"github.com/sourcenetwork/corekv/test/state"
 )
 
-type NamespaceType int
-
-const (
-	// Automatically execute the test with a namespaced store, as well the standard
-	// unnamespaced store.
-	Automatic = 0
-
-	// Disable the automatic wrapping of the store in a namespace.  Manually defined
-	// namespace actions will still execute.
-	ManualOnly = 1
-
-	// Disables testing without the automatically provided namespace.
-	AutomaticForced = 2
-)
+func init() {
+	multiplier.Init("CORE_KV_MULTIPLIERS", "memory")
+}
 
 // Test is a single, self-contained, test.
 type Test struct {
-	// If this set is not empty, only the store types within it will be used to execute
-	// the test.
-	//
-	// This should only be used for temporarily documenting differences between Store
-	// implementations.
-	SupportedStoreTypes []state.StoreType
+	// The test will be skipped if the current active set of multipliers
+	// does not contain all of the given multiplier names.
+	Includes []multiplier.Name
 
-	// Namespacing controls automatic namespacing of test actions.
-	//
-	// This should only be used for temporarily documenting differences between Store
-	// implementations.
-	Namespacing NamespaceType
+	// The test will be skipped if the current active set of multipliers
+	// contains any of the given multiplier names.
+	Excludes []multiplier.Name
 
 	// Actions contains the set of actions that should be
 	// executed as part of this test.
@@ -44,57 +29,25 @@ type Test struct {
 }
 
 // Execute executes the [Test] and its actions.
-//
-// It will execute the test against all supported datastore implementations.
 func (test *Test) Execute(t testing.TB) {
-	if test.Namespacing != AutomaticForced {
-		for _, storeType := range state.StoreTypes {
-			if test.shouldSkipType(storeType) {
-				continue
-			}
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 
-			ctx := context.Background()
-			ctx, cancel := context.WithCancel(ctx)
+	multiplier.Skip(t, test.Includes, test.Excludes)
 
-			actions := prependNewStore(test.Actions)
-			actions = appendCloseStore(actions)
+	actions := prependNewStore(test.Actions)
+	actions = appendCloseStore(actions)
 
-			actions.Execute(&state.State{
-				Options: state.Options{
-					StoreType: storeType,
-				},
-				T:         t,
-				Ctx:       ctx,
-				CtxCancel: cancel,
-			})
-		}
-	}
+	actions = multiplier.Apply(actions)
 
-	if test.Namespacing != ManualOnly {
-		// As well as testing all supported stores directly, we then retest them namespaced.
-		// This provides us with very cheap test coverage of the namespace store.
-		for _, storeType := range state.StoreTypes {
-			if test.shouldSkipType(storeType) {
-				continue
-			}
+	t.Logf("Executing test. Multipliers: %s", multiplier.Get())
 
-			ctx := context.Background()
-			ctx, cancel := context.WithCancel(ctx)
-
-			actions := prependNamespaceStore(test.Actions)
-			actions = prependNewStore(actions)
-			actions = appendCloseStore(actions)
-
-			actions.Execute(&state.State{
-				Options: state.Options{
-					StoreType: storeType,
-				},
-				T:         t,
-				Ctx:       ctx,
-				CtxCancel: cancel,
-			})
-		}
-	}
+	actions.Execute(&state.State{
+		Options:   state.Options{},
+		T:         t,
+		Ctx:       ctx,
+		CtxCancel: cancel,
+	})
 }
 
 // prependNewStore prepends an [*action.NewStore] action to the front of the given
@@ -109,18 +62,6 @@ func prependNewStore(actions action.Actions) action.Actions {
 
 	result := make(action.Actions, 1, len(actions)+1)
 	result[0] = &action.NewStore{}
-	result = append(result, actions...)
-
-	return result
-}
-
-// prependNewStore prepends an [*action.NewStore] action to the front of the given
-// action set.
-//
-// This will be done whether or not there are existing namespace actions in the set or not.
-func prependNamespaceStore(actions action.Actions) action.Actions {
-	result := make(action.Actions, 1, len(actions)+1)
-	result[0] = action.Namespace([]byte("/example"))
 	result = append(result, actions...)
 
 	return result
@@ -145,25 +86,6 @@ func hasType[TAction any](actions action.Actions) bool {
 	for _, action := range actions {
 		_, ok := action.(TAction)
 		if ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-// shouldSkipType returns true if this store type should be skipped for this test.
-func (test *Test) shouldSkipType(storeType state.StoreType) bool {
-	if len(test.SupportedStoreTypes) > 0 {
-		isSupported := false
-		for _, supportedType := range test.SupportedStoreTypes {
-			if storeType == supportedType {
-				isSupported = true
-				break
-			}
-		}
-
-		if !isSupported {
 			return true
 		}
 	}

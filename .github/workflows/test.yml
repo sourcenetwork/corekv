@@ -12,7 +12,37 @@ on:
       - main
 
 jobs:
-  run-tests:
+  test:
+    name: Run tests job
+
+    strategy:
+        matrix:
+          store: [memory, badger]
+          namespace: [namespace, none]
+
+    runs-on: ubuntu-latest
+
+    env:
+      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }}
+
+    steps:
+      - name: Checkout code into the directory
+        uses: actions/checkout@v3
+
+      - name: Setup Go environment explicitly
+        uses: actions/setup-go@v3
+        with:
+          go-version: "1.21"
+          check-latest: true
+
+      - name: Build dependencies
+        run: |
+          make deps:test-ci
+
+      - name: Run tests
+        run: make test:ci
+
+  tests-os:
     name: Run tests job
 
     strategy:

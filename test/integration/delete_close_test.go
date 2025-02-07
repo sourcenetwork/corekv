@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"github.com/sourcenetwork/corekv/test/action"
-	"github.com/sourcenetwork/corekv/test/state"
+	"github.com/sourcenetwork/corekv/test/multiplier"
 )
 
 func TestDeleteClose_MemoryStoreDeleteOnClosedStore_Errors(t *testing.T) {
 	test := &Test{
-		SupportedStoreTypes: []state.StoreType{
-			state.MemoryStoreType,
+		Includes: []string{
+			multiplier.Memory,
 		},
 		Actions: []action.Action{
 			action.Close(),
@@ -23,8 +23,8 @@ func TestDeleteClose_MemoryStoreDeleteOnClosedStore_Errors(t *testing.T) {
 
 func TestDeleteClose_BadgerStoreDeleteOnClosedStore_Errors(t *testing.T) {
 	test := &Test{
-		SupportedStoreTypes: []state.StoreType{
-			state.BadgerStoreType,
+		Includes: []string{
+			multiplier.Badger,
 		},
 		Actions: []action.Action{
 			action.Close(),
