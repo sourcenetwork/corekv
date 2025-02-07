@@ -19,11 +19,12 @@ jobs:
         matrix:
           store: [memory, badger]
           namespace: [namespace, none]
+          txn: [txn-commit, txn-discard, txn-multi, none]
 
     runs-on: ubuntu-latest
 
     env:
-      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }}
+      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.txn }}
 
     steps:
       - name: Checkout code into the directory

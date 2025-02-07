@@ -26,4 +26,24 @@ type State struct {
 	// This must be derived from the Rootstore.  For example it may be a namespace within the
 	// Rootstore, or even a transaction of that namespace.
 	Store corekv.Store
+
+	Txns []corekv.Txn
+}
+
+func (s *State) Clone() *State {
+	return &State{
+		T:         s.T,
+		Ctx:       s.Ctx,
+		CtxCancel: s.CtxCancel,
+		Options:   s.Options,
+		Rootstore: s.Rootstore,
+		Store:     s.Store,
+		Txns:      append([]corekv.Txn{}, s.Txns...),
+	}
+}
+
+func (s *State) WithStore(store corekv.Store) *State {
+	newState := s.Clone()
+	newState.Store = store
+	return newState
 }
