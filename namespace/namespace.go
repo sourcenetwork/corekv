@@ -127,8 +127,8 @@ func (nIter *namespaceIterator) Seek(key []byte) (bool, error) {
 	return nIter.it.Seek(pKey)
 }
 
-func (nIter *namespaceIterator) Close(ctx context.Context) error {
-	return nIter.it.Close(ctx)
+func (nIter *namespaceIterator) Close() error {
+	return nIter.it.Close()
 }
 
 func cp(bz []byte) (ret []byte) {

@@ -2,7 +2,6 @@ package badger
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/dgraph-io/badger/v4"
 
@@ -149,7 +148,7 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 	return true, nil
 }
 
-func (it *iterator) Close(ctx context.Context) error {
+func (it *iterator) Close() error {
 	it.i.Close()
 	if it.closer != nil {
 		return it.closer()

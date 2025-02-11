@@ -121,7 +121,7 @@ type Iterator interface {
 	Reset()
 
 	// Close releases the iterator.
-	Close(ctx context.Context) error
+	Close() error
 }
 
 // Store contains all the functions required for interacting with a store.
