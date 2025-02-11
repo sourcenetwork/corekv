@@ -249,7 +249,7 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 // }
 
 // Discard removes all the operations added to the transaction.
-func (t *basicTxn) Discard(ctx context.Context) {
+func (t *basicTxn) Discard() {
 	if t.discarded {
 		return
 	}
@@ -259,7 +259,7 @@ func (t *basicTxn) Discard(ctx context.Context) {
 }
 
 // Commit saves the operations to the underlying datastore.
-func (t *basicTxn) Commit(ctx context.Context) error {
+func (t *basicTxn) Commit() error {
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
@@ -269,7 +269,7 @@ func (t *basicTxn) Commit(ctx context.Context) error {
 	if t.discarded {
 		return ErrTxnDiscarded
 	}
-	defer t.Discard(ctx)
+	defer t.Discard()
 
 	if !t.readOnly {
 		return t.ds.commit(t)

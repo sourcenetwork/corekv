@@ -153,9 +153,9 @@ type Txn interface {
 
 	// Commit applies all changes made via this [Txn] to the underlying
 	// [Store].
-	Commit(ctx context.Context) error
+	Commit() error
 
 	// Discard discards all changes made via this object so far, returning
 	// it to the state it was at at time of construction.
-	Discard(ctx context.Context) error
+	Discard() error
 }
