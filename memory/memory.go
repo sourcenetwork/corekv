@@ -145,9 +145,9 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	return errors.Join(err, cErr)
 }
 
-func (d *Datastore) get(key []byte, version uint64) dsItem {
+func get(values *btree.BTreeG[dsItem], key []byte, version uint64) dsItem {
 	result := dsItem{}
-	d.values.Descend(dsItem{key: key, version: version}, func(item dsItem) bool {
+	values.Descend(dsItem{key: key, version: version}, func(item dsItem) bool {
 		if bytes.Equal(key, item.key) {
 			result = item
 		}
@@ -167,7 +167,7 @@ func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err erro
 	if len(key) == 0 {
 		return nil, corekv.ErrEmptyKey
 	}
-	result := d.get(key, d.getVersion())
+	result := get(d.values, key, d.getVersion())
 	if result.key == nil || result.isDeleted {
 		return nil, corekv.ErrNotFound
 	}
@@ -185,7 +185,7 @@ func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error
 	if len(key) == 0 {
 		return false, corekv.ErrEmptyKey
 	}
-	result := d.get(key, d.getVersion())
+	result := get(d.values, key, d.getVersion())
 	return result.key != nil && !result.isDeleted, nil
 }
 
@@ -240,9 +240,9 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 
 func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
 	if opts.Prefix != nil {
-		return newPrefixIter(d, opts.Prefix, opts.Reverse, d.getVersion())
+		return newPrefixIter(d.values, opts.Prefix, opts.Reverse, d.getVersion())
 	}
-	return newRangeIter(d, opts.Start, opts.End, opts.Reverse, d.getVersion())
+	return newRangeIter(d.values, opts.Start, opts.End, opts.Reverse, d.getVersion())
 }
 
 // purgeOldVersions will execute the purge once a day or when explicitly requested.

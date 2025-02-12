@@ -81,7 +81,7 @@ func (t *basicTxn) get(key []byte) dsItem {
 		return false
 	})
 	if result.key == nil {
-		result = t.ds.get(key, t.getDSVersion())
+		result = get(t.ds.values, key, t.getDSVersion())
 		result.isGet = true
 		t.ops.Set(result)
 	}
@@ -290,8 +290,8 @@ func (t *basicTxn) checkForConflicts() error {
 	iter := t.ops.Iter()
 	defer iter.Release()
 	for iter.Next() {
-		expectedItem := t.ds.get(iter.Item().key, t.getDSVersion())
-		latestItem := t.ds.get(iter.Item().key, t.ds.getVersion())
+		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
+		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
 		if latestItem.version != expectedItem.version {
 			return ErrTxnConflict
 		}
