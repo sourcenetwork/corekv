@@ -44,7 +44,7 @@ func (b *bDB) Get(ctx context.Context, key []byte) ([]byte, error) {
 	txn := b.newTxn(true)
 
 	result, err := txn.Get(ctx, key)
-	dErr := txn.Discard(ctx)
+	dErr := txn.Discard()
 
 	return result, errors.Join(err, dErr)
 }
@@ -53,7 +53,7 @@ func (b *bDB) Has(ctx context.Context, key []byte) (bool, error) {
 	txn := b.newTxn(true)
 
 	result, err := txn.Has(ctx, key)
-	dErr := txn.Discard(ctx)
+	dErr := txn.Discard()
 
 	return result, errors.Join(err, dErr)
 }
@@ -63,11 +63,11 @@ func (b *bDB) Set(ctx context.Context, key []byte, value []byte) error {
 
 	err := txn.Set(ctx, key, value)
 	if err != nil {
-		dErr := txn.Discard(ctx)
+		dErr := txn.Discard()
 		return errors.Join(err, dErr)
 	}
 
-	return txn.Commit(ctx)
+	return txn.Commit()
 }
 
 func (b *bDB) Delete(ctx context.Context, key []byte) error {
@@ -75,11 +75,11 @@ func (b *bDB) Delete(ctx context.Context, key []byte) error {
 
 	err := txn.Delete(ctx, key)
 	if err != nil {
-		dErr := txn.Discard(ctx)
+		dErr := txn.Discard()
 		return errors.Join(err, dErr)
 	}
 
-	return txn.Commit(ctx)
+	return txn.Commit()
 }
 
 func (b *bDB) Close() error {
@@ -94,7 +94,7 @@ func (b *bDB) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.
 	// so that the txn is discarded when the
 	// iterator is closed
 	it.withCloser(func() error {
-		return txn.Discard(ctx)
+		return txn.Discard()
 	})
 	return it
 
@@ -154,14 +154,18 @@ func (txn *bTxn) Delete(ctx context.Context, key []byte) error {
 	return badgerErrToKVErr(err)
 }
 
-func (txn *bTxn) Commit(ctx context.Context) error {
+func (txn *bTxn) Commit() error {
 	err := txn.t.Commit()
 	return badgerErrToKVErr(err)
 }
 
-func (txn *bTxn) Discard(ctx context.Context) error {
+func (txn *bTxn) Discard() error {
 	txn.t.Discard()
 	return nil
+}
+
+func (t *bTxn) Close() error {
+	return t.Discard()
 }
 
 var badgerErrToKVErrMap = map[error]error{

@@ -10,8 +10,8 @@ const Namespace Name = "namespace"
 
 // namespace represents the namespacing complexity multiplier.
 //
-// Applying the multiplier will prepend a [action.NamespaceStore] action
-// to the front of the action set.
+// Applying the multiplier will insert an [action.NamespaceStore] action
+// immediately after the last action that creates a new store.
 type namespace struct{}
 
 var _ Multiplier = (*namespace)(nil)
@@ -21,9 +21,26 @@ func (n *namespace) Name() Name {
 }
 
 func (n *namespace) Apply(source action.Actions) action.Actions {
-	result := make(action.Actions, 1, len(source)+1)
-	result[0] = action.Namespace([]byte("/example"))
-	result = append(result, source...)
+	lastStoreWrappingIndex := 0
+	result := make(action.Actions, len(source)+1)
+
+	for i, a := range source {
+		switch a.(type) {
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+			lastStoreWrappingIndex = i
+		}
+	}
+
+	offset := 0
+	for i, a := range source {
+		newIndex := i + offset
+		result[newIndex] = a
+
+		if i == lastStoreWrappingIndex {
+			result[newIndex+1] = action.Namespace([]byte("/example"))
+			offset += 1
+		}
+	}
 
 	return result
 }

@@ -26,4 +26,6 @@ type State struct {
 	// This must be derived from the Rootstore.  For example it may be a namespace within the
 	// Rootstore, or even a transaction of that namespace.
 	Store corekv.Store
+
+	Txns []corekv.Txn
 }

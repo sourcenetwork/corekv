@@ -2,7 +2,6 @@ package memory
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/sourcenetwork/corekv"
 
@@ -235,7 +234,7 @@ func (iter *iterator) Seek(key []byte) (bool, error) {
 	return true, nil
 }
 
-func (iter *iterator) Close(ctx context.Context) error {
+func (iter *iterator) Close() error {
 	iter.it.Release()
 	return nil
 }

@@ -1,6 +1,7 @@
 package action
 
 import (
+	"github.com/sourcenetwork/corekv"
 	"github.com/sourcenetwork/corekv/namespace"
 	"github.com/sourcenetwork/corekv/test/state"
 )
@@ -24,5 +25,15 @@ func Namespace(namespace []byte) *NamespaceStore {
 }
 
 func (a *NamespaceStore) Execute(s *state.State) {
-	s.Store = namespace.Wrap(s.Store, a.Namespace)
+	switch store := s.Store.(type) {
+	case corekv.Txn:
+		s.Store = namespace.WrapTxn(store, a.Namespace)
+
+	case corekv.TxnStore:
+		s.Store = namespace.WrapTS(store, a.Namespace)
+
+	default:
+		s.Store = namespace.Wrap(s.Store, a.Namespace)
+
+	}
 }

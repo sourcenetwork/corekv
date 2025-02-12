@@ -140,7 +140,7 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	tx := d.newTransaction(false)
 
 	err := tx.Delete(ctx, key)
-	cErr := tx.Commit(ctx)
+	cErr := tx.Commit()
 
 	return errors.Join(err, cErr)
 }
@@ -232,10 +232,10 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 
 	err = tx.Set(ctx, key, value)
 	if err != nil {
-		tx.Discard(ctx)
+		tx.Discard()
 		return err
 	}
-	return tx.Commit(ctx)
+	return tx.Commit()
 }
 
 func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {

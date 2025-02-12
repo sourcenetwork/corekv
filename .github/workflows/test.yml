@@ -19,11 +19,20 @@ jobs:
         matrix:
           store: [memory, badger]
           namespace: [namespace, none]
+          txn: [txn-commit, txn-discard, txn-multi, none]
+          # memory store does not yet support transactions, so we have to exclude it from txn tests
+          exclude:
+            - store: memory
+              txn: txn-commit
+            - store: memory
+              txn: txn-discard
+            - store: memory
+              txn: txn-multi
 
     runs-on: ubuntu-latest
 
     env:
-      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }}
+      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.txn }}
 
     steps:
       - name: Checkout code into the directory

@@ -12,17 +12,46 @@ type namespaceStore struct {
 	store     corekv.Store
 }
 
-var _ corekv.Store = (*namespaceStore)(nil)
+var _ corekv.TxnStore = (*namespaceStore)(nil)
+
+type namespacedTxn struct {
+	corekv.Store
+
+	txn corekv.Txn
+}
+
+var _ corekv.Txn = (*namespacedTxn)(nil)
 
 // Wrap lets you namespace a store with a given prefix.
-// The generic parameter allows you to wrap any kind of
-// underlying store ( corekv.TxnStore, Batchable, etc) and keep
-// the concrete type, just wrapped.
 func Wrap(store corekv.Store, prefix []byte) corekv.Store {
 	return &namespaceStore{
 		namespace: prefix,
 		store:     store,
 	}
+}
+
+// WrapTS lets you namespace a transaction store with a given prefix.
+func WrapTS(store corekv.TxnStore, prefix []byte) corekv.TxnStore {
+	return &namespaceStore{
+		namespace: prefix,
+		store:     store,
+	}
+}
+
+// WrapTxn lets you namespace a transaction with a given prefix.
+func WrapTxn(txn corekv.Txn, prefix []byte) corekv.Txn {
+	return &namespacedTxn{
+		Store: Wrap(txn, prefix),
+		txn:   txn,
+	}
+}
+
+func (nstore *namespaceStore) NewTxn(readonly bool) corekv.Txn {
+	// Here we assume the cast is safe, as this function is only ever publically
+	// exposed by values returned from `WrapTS`, in which case the type is always
+	// `TxnStore`.
+	txn := nstore.store.(corekv.TxnStore).NewTxn(readonly)
+	return WrapTxn(txn, nstore.namespace)
 }
 
 func (nstore *namespaceStore) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -127,8 +156,16 @@ func (nIter *namespaceIterator) Seek(key []byte) (bool, error) {
 	return nIter.it.Seek(pKey)
 }
 
-func (nIter *namespaceIterator) Close(ctx context.Context) error {
-	return nIter.it.Close(ctx)
+func (nIter *namespaceIterator) Close() error {
+	return nIter.it.Close()
+}
+
+func (txn *namespacedTxn) Commit() error {
+	return txn.txn.Commit()
+}
+
+func (txn *namespacedTxn) Discard() error {
+	return txn.txn.Discard()
 }
 
 func cp(bz []byte) (ret []byte) {

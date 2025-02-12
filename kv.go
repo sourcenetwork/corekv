@@ -121,7 +121,7 @@ type Iterator interface {
 	Reset()
 
 	// Close releases the iterator.
-	Close(ctx context.Context) error
+	Close() error
 }
 
 // Store contains all the functions required for interacting with a store.
@@ -148,14 +148,13 @@ type TxnStore interface {
 // and isolates changes made via this object from the underlying store
 // until `Commit` is called.
 type Txn interface {
-	Reader
-	Writer
+	Store
 
 	// Commit applies all changes made via this [Txn] to the underlying
 	// [Store].
-	Commit(ctx context.Context) error
+	Commit() error
 
 	// Discard discards all changes made via this object so far, returning
 	// it to the state it was at at time of construction.
-	Discard(ctx context.Context) error
+	Discard() error
 }

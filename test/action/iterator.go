@@ -24,7 +24,7 @@ func (a *Iterator) Execute(s *state.State) {
 		action.Execute(s, iterator)
 	}
 
-	err := iterator.Close(s.Ctx)
+	err := iterator.Close()
 	require.NoError(s.T, err)
 }
 
