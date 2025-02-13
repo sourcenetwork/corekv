@@ -68,8 +68,6 @@ type Datastore struct {
 }
 
 var _ corekv.Store = (*Datastore)(nil)
-
-// var _ corekv.Batchable = (*Datastore)(nil)
 var _ corekv.TxnStore = (*Datastore)(nil)
 
 // NewDatastore constructs an empty Datastore.
@@ -93,19 +91,6 @@ func (d *Datastore) getVersion() uint64 {
 func (d *Datastore) nextVersion() uint64 {
 	return atomic.AddUint64(d.version, 1)
 }
-
-// Batch return a corekv.Batch datastore based on Datastore.
-// func (d *Datastore) Batch(ctx context.Context) (corekv.Batch, error) {
-// 	return d.newBasicBatch(), nil
-// }
-
-// // newBasicBatch returns a corekv.Batch datastore.
-// func (d *Datastore) newBasicBatch() corekv.Batch {
-// 	return &basicBatch{
-// 		ops: make(map[[]byte]op),
-// 		ds:  d,
-// 	}
-// }
 
 func (d *Datastore) Close() error {
 	d.closeLk.Lock()
