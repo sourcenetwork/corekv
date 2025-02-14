@@ -87,7 +87,7 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 			postCommitActions = action.Actions{}
 		}
 
-		if i > lastCreateStoreIndex && firstCloseIndex == 0 {
+		if i > lastCreateStoreIndex && i < firstCloseIndex {
 			newActions = append(newActions, action.WithTxn(a))
 		} else {
 			newActions = append(newActions, a)

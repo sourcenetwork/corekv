@@ -68,9 +68,7 @@ type Datastore struct {
 }
 
 var _ corekv.Store = (*Datastore)(nil)
-
-// var _ corekv.Batchable = (*Datastore)(nil)
-// var _ corekv.TxnStore = (*Datastore)(nil)
+var _ corekv.TxnStore = (*Datastore)(nil)
 
 // NewDatastore constructs an empty Datastore.
 func NewDatastore(ctx context.Context) *Datastore {
@@ -93,19 +91,6 @@ func (d *Datastore) getVersion() uint64 {
 func (d *Datastore) nextVersion() uint64 {
 	return atomic.AddUint64(d.version, 1)
 }
-
-// Batch return a corekv.Batch datastore based on Datastore.
-// func (d *Datastore) Batch(ctx context.Context) (corekv.Batch, error) {
-// 	return d.newBasicBatch(), nil
-// }
-
-// // newBasicBatch returns a corekv.Batch datastore.
-// func (d *Datastore) newBasicBatch() corekv.Batch {
-// 	return &basicBatch{
-// 		ops: make(map[[]byte]op),
-// 		ds:  d,
-// 	}
-// }
 
 func (d *Datastore) Close() error {
 	d.closeLk.Lock()
@@ -145,9 +130,9 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	return errors.Join(err, cErr)
 }
 
-func (d *Datastore) get(key []byte, version uint64) dsItem {
+func get(values *btree.BTreeG[dsItem], key []byte, version uint64) dsItem {
 	result := dsItem{}
-	d.values.Descend(dsItem{key: key, version: version}, func(item dsItem) bool {
+	values.Descend(dsItem{key: key, version: version}, func(item dsItem) bool {
 		if bytes.Equal(key, item.key) {
 			result = item
 		}
@@ -167,7 +152,7 @@ func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err erro
 	if len(key) == 0 {
 		return nil, corekv.ErrEmptyKey
 	}
-	result := d.get(key, d.getVersion())
+	result := get(d.values, key, d.getVersion())
 	if result.key == nil || result.isDeleted {
 		return nil, corekv.ErrNotFound
 	}
@@ -185,19 +170,14 @@ func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error
 	if len(key) == 0 {
 		return false, corekv.ErrEmptyKey
 	}
-	result := d.get(key, d.getVersion())
+	result := get(d.values, key, d.getVersion())
 	return result.key != nil && !result.isDeleted, nil
 }
 
-// NewTransaction return a corekv.Txn datastore based on Datastore.
-// func (d *Datastore) NewTxn(ctx context.Context, readOnly bool) (corekv.Txn, error) {
-// 	d.closeLk.RLock()
-// 	defer d.closeLk.RUnlock()
-// 	if d.closed {
-// 		return nil, ErrClosed
-// 	}
-// 	return d.newTransaction(readOnly), nil
-// }
+// NewTxn return a corekv.Txn datastore based on Datastore.
+func (d *Datastore) NewTxn(readOnly bool) corekv.Txn {
+	return d.newTransaction(readOnly)
+}
 
 // newTransaction returns a corekv.Txn datastore.
 //
@@ -240,9 +220,9 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 
 func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
 	if opts.Prefix != nil {
-		return newPrefixIter(d, opts.Prefix, opts.Reverse, d.getVersion())
+		return newPrefixIter(d.values, opts.Prefix, opts.Reverse, d.getVersion())
 	}
-	return newRangeIter(d, opts.Start, opts.End, opts.Reverse, d.getVersion())
+	return newRangeIter(d.values, opts.Start, opts.End, opts.Reverse, d.getVersion())
 }
 
 // purgeOldVersions will execute the purge once a day or when explicitly requested.

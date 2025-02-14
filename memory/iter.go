@@ -9,8 +9,8 @@ import (
 )
 
 type iterator struct {
-	db      *Datastore
 	version uint64
+	values  *btree.BTreeG[dsItem]
 	it      btree.IterG[dsItem]
 
 	// The key at which this iterator begins.
@@ -32,11 +32,11 @@ type iterator struct {
 
 var _ corekv.Iterator = (*iterator)(nil)
 
-func newPrefixIter(db *Datastore, prefix []byte, reverse bool, version uint64) *iterator {
+func newPrefixIter(values *btree.BTreeG[dsItem], prefix []byte, reverse bool, version uint64) *iterator {
 	return &iterator{
-		db:      db,
 		version: version,
-		it:      db.values.Iter(),
+		values:  values,
+		it:      values.Iter(),
 		start:   prefix,
 		end:     bytesPrefixEnd(prefix),
 		reverse: reverse,
@@ -44,11 +44,11 @@ func newPrefixIter(db *Datastore, prefix []byte, reverse bool, version uint64) *
 	}
 }
 
-func newRangeIter(db *Datastore, start, end []byte, reverse bool, version uint64) *iterator {
+func newRangeIter(values *btree.BTreeG[dsItem], start, end []byte, reverse bool, version uint64) *iterator {
 	return &iterator{
-		db:      db,
 		version: version,
-		it:      db.values.Iter(),
+		values:  values,
+		it:      values.Iter(),
 		start:   start,
 		end:     end,
 		reverse: reverse,
@@ -169,7 +169,7 @@ func (iter *iterator) Seek(key []byte) (bool, error) {
 	// of that key, otherwise, use the provided DB version
 	// TODO this could use some "peek" mechanic instead of a full lookup
 	version := iter.version
-	result := iter.db.get(key, version)
+	result := get(iter.values, key, iter.version)
 	if result.key != nil && !result.isDeleted {
 		version = result.version
 	}
