@@ -67,7 +67,6 @@ type Datastore struct {
 	commitLk sync.Mutex
 }
 
-var _ corekv.Store = (*Datastore)(nil)
 var _ corekv.TxnStore = (*Datastore)(nil)
 
 // NewDatastore constructs an empty Datastore.
