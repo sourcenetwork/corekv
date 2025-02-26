@@ -28,19 +28,45 @@ type iterator struct {
 	// reset is a mutatuble property that indicates whether the iterator should be
 	// returned to the beginning on the next [Next] call.
 	reset bool
+
+	// These properties are used by a work around for a bug in the btree implementation:
+	// https://github.com/tidwall/btree/issues/46 - these properties and the work around
+	// should be removed when the btree bug is fixed.
+	//
+	// `TestBTreePrevBug` also documents this issue.
+	lastItem  dsItem
+	firstItem dsItem
 }
 
 var _ corekv.Iterator = (*iterator)(nil)
 
 func newPrefixIter(values *btree.BTreeG[dsItem], prefix []byte, reverse bool, version uint64) *iterator {
+	it := values.Iter()
+
+	var lastItem dsItem
+	var firstItem dsItem
+	if reverse {
+		hasItems := it.Last()
+		if hasItems {
+			lastItem = it.Item()
+			it.First()
+			firstItem = it.Item()
+		}
+
+		it.Release()
+		it = values.Iter()
+	}
+
 	return &iterator{
-		version: version,
-		values:  values,
-		it:      values.Iter(),
-		start:   prefix,
-		end:     bytesPrefixEnd(prefix),
-		reverse: reverse,
-		reset:   true,
+		version:   version,
+		values:    values,
+		it:        it,
+		start:     prefix,
+		end:       bytesPrefixEnd(prefix),
+		reverse:   reverse,
+		reset:     true,
+		lastItem:  lastItem,
+		firstItem: firstItem,
 	}
 }
 
@@ -140,6 +166,14 @@ func (iter *iterator) Next() (bool, error) {
 
 func (iter *iterator) next() bool {
 	if iter.reverse {
+		if len(iter.firstItem.key) > 0 &&
+			iter.firstItem.version == iter.it.Item().version &&
+			bytes.Equal(iter.firstItem.key, iter.it.Item().key) {
+			// This if-block is a temporary work around for the bug noted on the
+			// `iter.firstItem` property.
+			return false
+		}
+
 		// WARNING: There is a bug in `Prev` that can cause unexpected behaviour
 		// when attempting to iterate beyond the end of the iterator.
 		//
@@ -241,6 +275,15 @@ func (iter *iterator) Close() error {
 
 func (iter *iterator) loadLatestItem() {
 	previousItem := iter.it.Item()
+
+	if iter.reverse && len(iter.lastItem.key) > 0 &&
+		iter.lastItem.version == previousItem.version &&
+		bytes.Equal(iter.lastItem.key, previousItem.key) {
+		// This if-block is a temporary work around for the bug noted on the
+		// `iter.lastItem` property.
+		return
+	}
+
 	for iter.it.Next() {
 		// Scan through until we reach the next key.
 		// It doesn't matter if it is deleted or not.
