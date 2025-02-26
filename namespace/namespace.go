@@ -12,7 +12,15 @@ type namespaceStore struct {
 	store     corekv.Store
 }
 
-var _ corekv.TxnStore = (*namespaceStore)(nil)
+var _ corekv.Store = (*namespaceStore)(nil)
+
+type namespaceTxnStore struct {
+	namespaceStore
+
+	store corekv.TxnStore
+}
+
+var _ corekv.TxnStore = (*namespaceTxnStore)(nil)
 
 type namespacedTxn struct {
 	corekv.Store
@@ -23,7 +31,7 @@ type namespacedTxn struct {
 var _ corekv.Txn = (*namespacedTxn)(nil)
 
 // Wrap lets you namespace a store with a given prefix.
-func Wrap(store corekv.Store, prefix []byte) corekv.Store {
+func Wrap(store corekv.Store, prefix []byte) *namespaceStore {
 	return &namespaceStore{
 		namespace: prefix,
 		store:     store,
@@ -31,26 +39,23 @@ func Wrap(store corekv.Store, prefix []byte) corekv.Store {
 }
 
 // WrapTS lets you namespace a transaction store with a given prefix.
-func WrapTS(store corekv.TxnStore, prefix []byte) corekv.TxnStore {
-	return &namespaceStore{
-		namespace: prefix,
-		store:     store,
+func WrapTS(store corekv.TxnStore, prefix []byte) *namespaceTxnStore {
+	return &namespaceTxnStore{
+		namespaceStore: *Wrap(store, prefix),
+		store:          store,
 	}
 }
 
 // WrapTxn lets you namespace a transaction with a given prefix.
-func WrapTxn(txn corekv.Txn, prefix []byte) corekv.Txn {
+func WrapTxn(txn corekv.Txn, prefix []byte) *namespacedTxn {
 	return &namespacedTxn{
 		Store: Wrap(txn, prefix),
 		txn:   txn,
 	}
 }
 
-func (nstore *namespaceStore) NewTxn(readonly bool) corekv.Txn {
-	// Here we assume the cast is safe, as this function is only ever publically
-	// exposed by values returned from `WrapTS`, in which case the type is always
-	// `TxnStore`.
-	txn := nstore.store.(corekv.TxnStore).NewTxn(readonly)
+func (nstore *namespaceTxnStore) NewTxn(readonly bool) corekv.Txn {
+	txn := nstore.store.NewTxn(readonly)
 	return WrapTxn(txn, nstore.namespace)
 }
 

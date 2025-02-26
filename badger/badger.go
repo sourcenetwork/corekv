@@ -14,11 +14,7 @@ type bDB struct {
 	db *badger.DB
 }
 
-func NewDatastore(path string, opts badger.Options) (corekv.Store, error) {
-	return newDatastore(path, opts)
-}
-
-func newDatastore(path string, opts badger.Options) (*bDB, error) {
+func NewDatastore(path string, opts badger.Options) (*bDB, error) {
 	opts.Dir = path
 	opts.ValueDir = path
 	opts.Logger = nil // badger is too chatty
@@ -27,14 +23,10 @@ func newDatastore(path string, opts badger.Options) (*bDB, error) {
 		return nil, err
 	}
 
-	return newDatastoreFrom(store), nil
+	return NewDatastoreFrom(store), nil
 }
 
-func NewDatastoreFrom(db *badger.DB) corekv.Store {
-	return newDatastoreFrom(db)
-}
-
-func newDatastoreFrom(db *badger.DB) *bDB {
+func NewDatastoreFrom(db *badger.DB) *bDB {
 	return &bDB{
 		db: db,
 	}
