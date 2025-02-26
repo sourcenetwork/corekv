@@ -114,13 +114,20 @@ func prefixed(prefix, key []byte) []byte {
 func (nstore *namespaceStore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
 	if opts.Prefix != nil {
 		opts.Prefix = nstore.prefixed(opts.Prefix)
-	} else {
-		if opts.Start != nil {
-			opts.Start = nstore.prefixed(opts.Start)
-		}
+	} else if opts.Start != nil || opts.End != nil {
+		opts.Start = nstore.prefixed(opts.Start)
+
 		if opts.End != nil {
 			opts.End = nstore.prefixed(opts.End)
+		} else {
+			// End is exclusive, and if it is nil, it still needs limiting to the namespace, so we
+			// set it to the namespace plus one
+			opts.End = bytesPrefixEnd(nstore.namespace)
 		}
+	} else {
+		// If all the scoping options are nil, we still need to scope the iterator
+		// to the prefix.
+		opts.Prefix = nstore.prefixed(opts.Prefix)
 	}
 
 	return &namespaceIterator{
@@ -172,4 +179,18 @@ func cp(bz []byte) (ret []byte) {
 	ret = make([]byte, len(bz))
 	copy(ret, bz)
 	return ret
+}
+
+func bytesPrefixEnd(b []byte) []byte {
+	end := make([]byte, len(b))
+	copy(end, b)
+	for i := len(end) - 1; i >= 0; i-- {
+		end[i] = end[i] + 1
+		if end[i] != 0 {
+			return end[:i+1]
+		}
+	}
+	// This statement will only be reached if the key is already a
+	// maximal byte string (i.e. already \xff...).
+	return b
 }
