@@ -124,9 +124,9 @@ type Iterator interface {
 	Close() error
 }
 
-// Dropable is an optionall interface implemented by some Stores.
+// Dropable is an optional interface implemented by some Stores.
 //
-// It provides a convienient and cheap way of deleting all the data in an existing store.
+// It provides a convenient and cheap way of deleting all the data in an existing store.
 type Dropable interface {
 	// DropAll deletes all the data stored in the store.
 	//
