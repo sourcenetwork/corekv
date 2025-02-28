@@ -124,6 +124,17 @@ type Iterator interface {
 	Close() error
 }
 
+// Dropable is an optionall interface implemented by some Stores.
+//
+// It provides a convienient and cheap way of deleting all the data in an existing store.
+type Dropable interface {
+	// DropAll deletes all the data stored in the store.
+	//
+	// Concurrent writes will be blocked, however depending on the underlying store implementation,
+	// concurrent reads may not be.  Badger does not block concurrent reads, but Memory store does.
+	DropAll() error
+}
+
 // Store contains all the functions required for interacting with a store.
 type Store interface {
 	Reader
