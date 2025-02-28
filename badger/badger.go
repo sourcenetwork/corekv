@@ -14,6 +14,7 @@ type Datastore struct {
 	db *badger.DB
 }
 
+var _ corekv.TxnStore = (*Datastore)(nil)
 var _ corekv.Dropable = (*Datastore)(nil)
 
 func NewDatastore(path string, opts badger.Options) (*Datastore, error) {
