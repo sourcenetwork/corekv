@@ -33,6 +33,9 @@ type iterator struct {
 	// https://github.com/tidwall/btree/issues/46 - these properties and the work around
 	// should be removed when the btree bug is fixed.
 	//
+	// Currently it is believed that this is only required for the `Reverse` option (tidwall bug
+	// appears to be directional).
+	//
 	// `TestBTreePrevBug` also documents this issue.
 	lastItem  dsItem
 	firstItem dsItem
