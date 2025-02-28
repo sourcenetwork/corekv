@@ -14,6 +14,9 @@ type Datastore struct {
 	db *badger.DB
 }
 
+var _ corekv.TxnStore = (*Datastore)(nil)
+var _ corekv.Dropable = (*Datastore)(nil)
+
 func NewDatastore(path string, opts badger.Options) (*Datastore, error) {
 	opts.Dir = path
 	opts.ValueDir = path
@@ -90,6 +93,10 @@ func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) c
 	})
 	return it
 
+}
+
+func (d *Datastore) DropAll() error {
+	return d.db.DropAll()
 }
 
 func (b *Datastore) NewTxn(readonly bool) corekv.Txn {
