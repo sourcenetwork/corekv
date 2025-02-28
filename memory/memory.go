@@ -68,6 +68,7 @@ type Datastore struct {
 }
 
 var _ corekv.TxnStore = (*Datastore)(nil)
+var _ corekv.Dropable = (*Datastore)(nil)
 
 // NewDatastore constructs an empty Datastore.
 func NewDatastore(ctx context.Context) *Datastore {
@@ -171,6 +172,11 @@ func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error
 	}
 	result := get(d.values, key, d.getVersion())
 	return result.key != nil && !result.isDeleted, nil
+}
+
+func (d *Datastore) DropAll() error {
+	d.values.Clear()
+	return nil
 }
 
 // NewTxn return a corekv.Txn datastore based on Datastore.
