@@ -6,60 +6,60 @@ import (
 	"github.com/sourcenetwork/corekv"
 )
 
-// namespaceStore wraps a namespace of another database as a logical database.
-type namespaceStore struct {
+// Datastore wraps a namespace of another database as a logical database.
+type Datastore struct {
 	namespace []byte
 	store     corekv.Store
 }
 
-var _ corekv.Store = (*namespaceStore)(nil)
+var _ corekv.Store = (*Datastore)(nil)
 
-type namespaceTxnStore struct {
-	namespaceStore
+type TxnStore struct {
+	Datastore
 
 	store corekv.TxnStore
 }
 
-var _ corekv.TxnStore = (*namespaceTxnStore)(nil)
+var _ corekv.TxnStore = (*TxnStore)(nil)
 
-type namespacedTxn struct {
+type Txn struct {
 	corekv.Store
 
 	txn corekv.Txn
 }
 
-var _ corekv.Txn = (*namespacedTxn)(nil)
+var _ corekv.Txn = (*Txn)(nil)
 
 // Wrap lets you namespace a store with a given prefix.
-func Wrap(store corekv.Store, prefix []byte) *namespaceStore {
-	return &namespaceStore{
+func Wrap(store corekv.Store, prefix []byte) *Datastore {
+	return &Datastore{
 		namespace: prefix,
 		store:     store,
 	}
 }
 
 // WrapTS lets you namespace a transaction store with a given prefix.
-func WrapTS(store corekv.TxnStore, prefix []byte) *namespaceTxnStore {
-	return &namespaceTxnStore{
-		namespaceStore: *Wrap(store, prefix),
-		store:          store,
+func WrapTS(store corekv.TxnStore, prefix []byte) *TxnStore {
+	return &TxnStore{
+		Datastore: *Wrap(store, prefix),
+		store:     store,
 	}
 }
 
 // WrapTxn lets you namespace a transaction with a given prefix.
-func WrapTxn(txn corekv.Txn, prefix []byte) *namespacedTxn {
-	return &namespacedTxn{
+func WrapTxn(txn corekv.Txn, prefix []byte) *Txn {
+	return &Txn{
 		Store: Wrap(txn, prefix),
 		txn:   txn,
 	}
 }
 
-func (nstore *namespaceTxnStore) NewTxn(readonly bool) corekv.Txn {
+func (nstore *TxnStore) NewTxn(readonly bool) corekv.Txn {
 	txn := nstore.store.NewTxn(readonly)
 	return WrapTxn(txn, nstore.namespace)
 }
 
-func (nstore *namespaceStore) Get(ctx context.Context, key []byte) ([]byte, error) {
+func (nstore *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, corekv.ErrEmptyKey
 	}
@@ -72,7 +72,7 @@ func (nstore *namespaceStore) Get(ctx context.Context, key []byte) ([]byte, erro
 	return value, nil
 }
 
-func (nstore *namespaceStore) Has(ctx context.Context, key []byte) (bool, error) {
+func (nstore *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
 	if len(key) == 0 {
 		return false, corekv.ErrEmptyKey
 	}
@@ -85,7 +85,7 @@ func (nstore *namespaceStore) Has(ctx context.Context, key []byte) (bool, error)
 	return has, nil
 }
 
-func (nstore *namespaceStore) Set(ctx context.Context, key []byte, value []byte) error {
+func (nstore *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
 	}
@@ -94,7 +94,7 @@ func (nstore *namespaceStore) Set(ctx context.Context, key []byte, value []byte)
 	return nstore.store.Set(ctx, pkey, value)
 }
 
-func (nstore *namespaceStore) Delete(ctx context.Context, key []byte) error {
+func (nstore *Datastore) Delete(ctx context.Context, key []byte) error {
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
 	}
@@ -103,11 +103,11 @@ func (nstore *namespaceStore) Delete(ctx context.Context, key []byte) error {
 	return nstore.store.Delete(ctx, pkey)
 }
 
-func (nstore *namespaceStore) Close() error {
+func (nstore *Datastore) Close() error {
 	return nstore.store.Close()
 }
 
-func (nstore *namespaceStore) prefixed(key []byte) []byte {
+func (nstore *Datastore) prefixed(key []byte) []byte {
 	return prefixed(nstore.namespace, key)
 }
 
@@ -116,7 +116,7 @@ func prefixed(prefix, key []byte) []byte {
 }
 
 // Iterator creates a new iterator instance
-func (nstore *namespaceStore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
+func (nstore *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
 	if opts.Prefix != nil {
 		opts.Prefix = nstore.prefixed(opts.Prefix)
 	} else if opts.Start != nil || opts.End != nil {
@@ -172,11 +172,11 @@ func (nIter *namespaceIterator) Close() error {
 	return nIter.it.Close()
 }
 
-func (txn *namespacedTxn) Commit() error {
+func (txn *Txn) Commit() error {
 	return txn.txn.Commit()
 }
 
-func (txn *namespacedTxn) Discard() error {
+func (txn *Txn) Discard() error {
 	return txn.txn.Discard()
 }
 
