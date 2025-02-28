@@ -10,15 +10,11 @@ import (
 	"github.com/sourcenetwork/corekv"
 )
 
-type bDB struct {
+type Datastore struct {
 	db *badger.DB
 }
 
-func NewDatastore(path string, opts badger.Options) (corekv.Store, error) {
-	return newDatastore(path, opts)
-}
-
-func newDatastore(path string, opts badger.Options) (*bDB, error) {
+func NewDatastore(path string, opts badger.Options) (*Datastore, error) {
 	opts.Dir = path
 	opts.ValueDir = path
 	opts.Logger = nil // badger is too chatty
@@ -27,20 +23,16 @@ func newDatastore(path string, opts badger.Options) (*bDB, error) {
 		return nil, err
 	}
 
-	return newDatastoreFrom(store), nil
+	return NewDatastoreFrom(store), nil
 }
 
-func NewDatastoreFrom(db *badger.DB) corekv.Store {
-	return newDatastoreFrom(db)
-}
-
-func newDatastoreFrom(db *badger.DB) *bDB {
-	return &bDB{
+func NewDatastoreFrom(db *badger.DB) *Datastore {
+	return &Datastore{
 		db: db,
 	}
 }
 
-func (b *bDB) Get(ctx context.Context, key []byte) ([]byte, error) {
+func (b *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	txn := b.newTxn(true)
 
 	result, err := txn.Get(ctx, key)
@@ -49,7 +41,7 @@ func (b *bDB) Get(ctx context.Context, key []byte) ([]byte, error) {
 	return result, errors.Join(err, dErr)
 }
 
-func (b *bDB) Has(ctx context.Context, key []byte) (bool, error) {
+func (b *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
 	txn := b.newTxn(true)
 
 	result, err := txn.Has(ctx, key)
@@ -58,7 +50,7 @@ func (b *bDB) Has(ctx context.Context, key []byte) (bool, error) {
 	return result, errors.Join(err, dErr)
 }
 
-func (b *bDB) Set(ctx context.Context, key []byte, value []byte) error {
+func (b *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
 	txn := b.newTxn(false)
 
 	err := txn.Set(ctx, key, value)
@@ -70,7 +62,7 @@ func (b *bDB) Set(ctx context.Context, key []byte, value []byte) error {
 	return txn.Commit()
 }
 
-func (b *bDB) Delete(ctx context.Context, key []byte) error {
+func (b *Datastore) Delete(ctx context.Context, key []byte) error {
 	txn := b.newTxn(false)
 
 	err := txn.Delete(ctx, key)
@@ -82,11 +74,11 @@ func (b *bDB) Delete(ctx context.Context, key []byte) error {
 	return txn.Commit()
 }
 
-func (b *bDB) Close() error {
+func (b *Datastore) Close() error {
 	return b.db.Close()
 }
 
-func (b *bDB) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
+func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
 	txn := b.newTxn(true)
 	it := txn.iterator(iterOpts)
 
@@ -100,11 +92,11 @@ func (b *bDB) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.
 
 }
 
-func (b *bDB) NewTxn(readonly bool) corekv.Txn {
+func (b *Datastore) NewTxn(readonly bool) corekv.Txn {
 	return b.newTxn(readonly)
 }
 
-func (b *bDB) newTxn(readonly bool) *bTxn {
+func (b *Datastore) newTxn(readonly bool) *bTxn {
 	return &bTxn{b.db.NewTransaction(!readonly)}
 }
 
