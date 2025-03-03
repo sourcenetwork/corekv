@@ -48,14 +48,14 @@ func (t *basicTxn) Delete(ctx context.Context, key []byte) error {
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return ErrClosed
+		return corekv.ErrDBClosed
 	}
 
 	if t.discarded {
-		return ErrTxnDiscarded
+		return corekv.ErrDiscardedTxn
 	}
 	if t.readOnly {
-		return ErrReadOnlyTxn
+		return corekv.ErrReadOnlyTxn
 	}
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
@@ -93,10 +93,10 @@ func (t *basicTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return nil, ErrClosed
+		return nil, corekv.ErrDBClosed
 	}
 	if t.discarded {
-		return nil, ErrTxnDiscarded
+		return nil, corekv.ErrDiscardedTxn
 	}
 	if len(key) == 0 {
 		return nil, corekv.ErrEmptyKey
@@ -114,11 +114,11 @@ func (t *basicTxn) GetSize(ctx context.Context, key []byte) (size int, err error
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return 0, ErrClosed
+		return 0, corekv.ErrDBClosed
 	}
 
 	if t.discarded {
-		return 0, ErrTxnDiscarded
+		return 0, corekv.ErrDiscardedTxn
 	}
 	if len(key) == 0 {
 		return 0, corekv.ErrEmptyKey
@@ -136,10 +136,10 @@ func (t *basicTxn) Has(ctx context.Context, key []byte) (exists bool, err error)
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return false, ErrClosed
+		return false, corekv.ErrDBClosed
 	}
 	if t.discarded {
-		return false, ErrTxnDiscarded
+		return false, corekv.ErrDiscardedTxn
 	}
 	if len(key) == 0 {
 		return false, corekv.ErrEmptyKey
@@ -157,13 +157,13 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return ErrClosed
+		return corekv.ErrDBClosed
 	}
 	if t.discarded {
-		return ErrTxnDiscarded
+		return corekv.ErrDiscardedTxn
 	}
 	if t.readOnly {
-		return ErrReadOnlyTxn
+		return corekv.ErrReadOnlyTxn
 	}
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
@@ -336,11 +336,11 @@ func (t *basicTxn) Commit() error {
 	t.closeLk.RLock()
 	defer t.closeLk.RUnlock()
 	if t.closed {
-		return ErrClosed
+		return corekv.ErrDBClosed
 	}
 
 	if t.discarded {
-		return ErrTxnDiscarded
+		return corekv.ErrDiscardedTxn
 	}
 	defer t.Discard()
 
@@ -361,7 +361,7 @@ func (t *basicTxn) checkForConflicts() error {
 		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
 		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
 		if latestItem.version != expectedItem.version {
-			return ErrTxnConflict
+			return corekv.ErrTxnConflict
 		}
 	}
 	return nil

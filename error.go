@@ -1,11 +1,13 @@
 package corekv
 
-import "fmt"
+import "errors"
 
 var (
-	ErrNotFound     = fmt.Errorf("kv: key not found")
-	ErrEmptyKey     = fmt.Errorf("kv: empty key")
-	ErrValueNil     = fmt.Errorf("kv: value is nil")
-	ErrDiscardedTxn = fmt.Errorf("kv: transaction discarded")
-	ErrDBClosed     = fmt.Errorf("kv: datastore closed")
+	ErrNotFound     = errors.New("kv: key not found")
+	ErrEmptyKey     = errors.New("kv: empty key")
+	ErrValueNil     = errors.New("kv: value is nil")
+	ErrDiscardedTxn = errors.New("kv: transaction discarded")
+	ErrDBClosed     = errors.New("kv: datastore closed")
+	ErrTxnConflict  = errors.New("kv: transaction Conflict. Please retry")
+	ErrReadOnlyTxn  = errors.New("kv: read only transaction")
 )
