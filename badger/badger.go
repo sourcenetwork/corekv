@@ -172,6 +172,7 @@ var badgerErrToKVErrMap = map[error]error{
 	badger.ErrKeyNotFound:  corekv.ErrNotFound,
 	badger.ErrDiscardedTxn: corekv.ErrDiscardedTxn,
 	badger.ErrDBClosed:     corekv.ErrDBClosed,
+	badger.ErrConflict:     corekv.ErrTxnConflict,
 }
 
 func badgerErrToKVErr(err error) error {
@@ -196,11 +197,12 @@ func badgerErrToKVErr(err error) error {
 		// check the string
 		case strings.Contains(err.Error(), badger.ErrDBClosed.Error()):
 			mappedErr = corekv.ErrDBClosed
+		case strings.Contains(err.Error(), badger.ErrConflict.Error()):
+			mappedErr = corekv.ErrTxnConflict
 		default:
 			return err // no mapping needed atm
 		}
 	}
 
-	return errors.Join(mappedErr, err)
-
+	return mappedErr
 }
