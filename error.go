@@ -8,6 +8,6 @@ var (
 	ErrValueNil     = errors.New("value is nil")
 	ErrDiscardedTxn = errors.New("transaction discarded")
 	ErrDBClosed     = errors.New("datastore closed")
-	ErrTxnConflict  = errors.New("transaction Conflict. Please retry")
+	ErrTxnConflict  = errors.New("transaction conflict. Please retry")
 	ErrReadOnlyTxn  = errors.New("read only transaction")
 )
