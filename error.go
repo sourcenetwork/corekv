@@ -3,11 +3,11 @@ package corekv
 import "errors"
 
 var (
-	ErrNotFound     = errors.New("kv: key not found")
-	ErrEmptyKey     = errors.New("kv: empty key")
-	ErrValueNil     = errors.New("kv: value is nil")
-	ErrDiscardedTxn = errors.New("kv: transaction discarded")
-	ErrDBClosed     = errors.New("kv: datastore closed")
-	ErrTxnConflict  = errors.New("kv: transaction Conflict. Please retry")
-	ErrReadOnlyTxn  = errors.New("kv: read only transaction")
+	ErrNotFound     = errors.New("key not found")
+	ErrEmptyKey     = errors.New("empty key")
+	ErrValueNil     = errors.New("value is nil")
+	ErrDiscardedTxn = errors.New("transaction discarded")
+	ErrDBClosed     = errors.New("datastore closed")
+	ErrTxnConflict  = errors.New("transaction Conflict. Please retry")
+	ErrReadOnlyTxn  = errors.New("read only transaction")
 )
