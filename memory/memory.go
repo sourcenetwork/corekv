@@ -117,7 +117,7 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
-		return ErrClosed
+		return corekv.ErrDBClosed
 	}
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
@@ -147,7 +147,7 @@ func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err erro
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
-		return nil, ErrClosed
+		return nil, corekv.ErrDBClosed
 	}
 	if len(key) == 0 {
 		return nil, corekv.ErrEmptyKey
@@ -165,7 +165,7 @@ func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
-		return false, ErrClosed
+		return false, corekv.ErrDBClosed
 	}
 	if len(key) == 0 {
 		return false, corekv.ErrEmptyKey
@@ -208,7 +208,7 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
-		return ErrClosed
+		return corekv.ErrDBClosed
 	}
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
