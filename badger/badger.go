@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 
@@ -12,6 +13,12 @@ import (
 
 type Datastore struct {
 	db *badger.DB
+
+	// Badger panics when creating a new iterator if the store has closed, instead of returning an error
+	// like it does everywhere else.  We would much rather error than panic, so we have to track closed-ness
+	// ourself on top of the badger tracking.
+	closed  bool
+	closeLk sync.RWMutex
 }
 
 var _ corekv.TxnStore = (*Datastore)(nil)
@@ -78,6 +85,10 @@ func (b *Datastore) Delete(ctx context.Context, key []byte) error {
 }
 
 func (b *Datastore) Close() error {
+	b.closeLk.Lock()
+	defer b.closeLk.Unlock()
+	b.closed = true
+
 	return b.db.Close()
 }
 
@@ -145,6 +156,12 @@ func (txn *bTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (cor
 }
 
 func (txn *bTxn) iterator(iopts corekv.IterOptions) (iteratorCloser, error) {
+	txn.d.closeLk.RLock()
+	defer txn.d.closeLk.RUnlock()
+	if txn.d.closed {
+		return nil, corekv.ErrDBClosed
+	}
+
 	if iopts.Prefix != nil {
 		return newPrefixIterator(txn, iopts.Prefix, iopts.Reverse, iopts.KeysOnly), nil
 	}

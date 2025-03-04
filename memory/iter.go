@@ -9,6 +9,8 @@ import (
 )
 
 type iterator struct {
+	d *Datastore
+
 	version uint64
 	values  *btree.BTreeG[dsItem]
 	it      btree.IterG[dsItem]
@@ -43,7 +45,7 @@ type iterator struct {
 
 var _ corekv.Iterator = (*iterator)(nil)
 
-func newPrefixIter(values *btree.BTreeG[dsItem], prefix []byte, reverse bool, version uint64) *iterator {
+func newPrefixIter(d *Datastore, values *btree.BTreeG[dsItem], prefix []byte, reverse bool, version uint64) *iterator {
 	it := values.Iter()
 
 	var lastItem dsItem
@@ -61,6 +63,7 @@ func newPrefixIter(values *btree.BTreeG[dsItem], prefix []byte, reverse bool, ve
 	}
 
 	return &iterator{
+		d:         d,
 		version:   version,
 		values:    values,
 		it:        it,
@@ -73,8 +76,9 @@ func newPrefixIter(values *btree.BTreeG[dsItem], prefix []byte, reverse bool, ve
 	}
 }
 
-func newRangeIter(values *btree.BTreeG[dsItem], start, end []byte, reverse bool, version uint64) *iterator {
+func newRangeIter(d *Datastore, values *btree.BTreeG[dsItem], start, end []byte, reverse bool, version uint64) *iterator {
 	return &iterator{
+		d:       d,
 		version: version,
 		values:  values,
 		it:      values.Iter(),
@@ -95,9 +99,9 @@ func (iter *iterator) restart() (bool, error) {
 	iter.reset = false
 
 	if len(iter.end) > 0 && iter.reverse {
-		return iter.Seek(iter.end)
+		return iter.seek(iter.end)
 	} else if len(iter.start) > 0 && !iter.reverse {
-		return iter.Seek(iter.start)
+		return iter.seek(iter.start)
 	} else {
 		var hasItem bool
 		if iter.reverse {
@@ -114,7 +118,7 @@ func (iter *iterator) restart() (bool, error) {
 		}
 
 		if !iter.valid() {
-			return iter.Next()
+			return iter.next()
 		}
 
 		return true, nil
@@ -139,13 +143,28 @@ func (iter *iterator) valid() bool {
 }
 
 func (iter *iterator) Next() (bool, error) {
+	iter.d.closeLk.RLock()
+	defer iter.d.closeLk.RUnlock()
+	if iter.d.closed {
+		return false, corekv.ErrDBClosed
+	}
+
+	return iter.next()
+}
+
+// next bypasses the RLock (`closeLk`) that `next“, via `restart`, uses.
+// It should only ever be called if the `closeLk` is already held.
+//
+// It exists because RLocking a single mutex multiple times from the same routine
+// before unlocking it causes deadlocks.
+func (iter *iterator) next() (bool, error) {
 	if iter.reset {
 		return iter.restart()
 	}
 
 	previousItem := iter.it.Item()
 	var hasItem bool
-	for iter.next() {
+	for iter.moveNext() {
 		// Scan through until we reach the next key.
 		// It doesn't matter if it is deleted or not.
 		if !bytes.Equal(previousItem.key, iter.it.Item().key) {
@@ -167,7 +186,7 @@ func (iter *iterator) Next() (bool, error) {
 	return iter.valid(), nil
 }
 
-func (iter *iterator) next() bool {
+func (iter *iterator) moveNext() bool {
 	if iter.reverse {
 		if len(iter.firstItem.key) > 0 &&
 			iter.firstItem.version == iter.it.Item().version &&
@@ -197,6 +216,21 @@ func (iter *iterator) Value() ([]byte, error) {
 }
 
 func (iter *iterator) Seek(key []byte) (bool, error) {
+	iter.d.closeLk.RLock()
+	defer iter.d.closeLk.RUnlock()
+	if iter.d.closed {
+		return false, corekv.ErrDBClosed
+	}
+
+	return iter.seek(key)
+}
+
+// seek bypasses the RLock (`closeLk`) that Seek uses.  It should only ever be called
+// if the `closeLk` is already held.
+//
+// It exists because RLocking a single mutex multiple times from the same routine
+// before unlocking it causes deadlocks.
+func (iter *iterator) seek(key []byte) (bool, error) {
 	// Clear the reset property, else if Next was call following Seek,
 	// Next may incorrectly return to the beginning.
 	iter.reset = false
@@ -265,7 +299,7 @@ func (iter *iterator) Seek(key []byte) (bool, error) {
 	iter.loadLatestItem()
 
 	if !iter.valid() {
-		return iter.Next()
+		return iter.next()
 	}
 
 	return true, nil
