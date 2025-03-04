@@ -173,20 +173,20 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 	return nil
 }
 
-func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
+func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
 	if opts.Prefix != nil {
 		return &txnIterator{
 			opts:      opts,
 			txnIter:   newPrefixIter(t.ops, opts.Prefix, opts.Reverse, t.getTxnVersion()),
 			storeIter: newPrefixIter(t.ds.values, opts.Prefix, opts.Reverse, t.getDSVersion()),
-		}
+		}, nil
 	}
 
 	return &txnIterator{
 		opts:      opts,
 		txnIter:   newRangeIter(t.ops, opts.Start, opts.End, opts.Reverse, t.getTxnVersion()),
 		storeIter: newRangeIter(t.ds.values, opts.Start, opts.End, opts.Reverse, t.getDSVersion()),
-	}
+	}, nil
 }
 
 type txnIterator struct {

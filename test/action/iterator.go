@@ -18,13 +18,14 @@ type Iterator struct {
 var _ Action = (*Iterator)(nil)
 
 func (a *Iterator) Execute(s *state.State) {
-	iterator := s.Store.Iterator(s.Ctx, a.IterOptions)
+	iterator, err := s.Store.Iterator(s.Ctx, a.IterOptions)
+	require.NoError(s.T, err)
 
 	for _, action := range a.ChildActions {
 		action.Execute(s, iterator)
 	}
 
-	err := iterator.Close()
+	err = iterator.Close()
 	require.NoError(s.T, err)
 }
 

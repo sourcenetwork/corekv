@@ -32,7 +32,8 @@ type Iterate struct {
 var _ Action = (*Iterate)(nil)
 
 func (a *Iterate) Execute(s *state.State) {
-	iterator := s.Store.Iterator(s.Ctx, a.IterOptions)
+	iterator, err := s.Store.Iterator(s.Ctx, a.IterOptions)
+	require.NoError(s.T, err)
 
 	entries := make([]KeyValue, 0)
 	for {
@@ -54,7 +55,7 @@ func (a *Iterate) Execute(s *state.State) {
 		})
 	}
 
-	err := iterator.Close()
+	err = iterator.Close()
 	require.NoError(s.T, err)
 
 	require.Equal(s.T, a.Expected, entries)

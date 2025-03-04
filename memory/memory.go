@@ -223,11 +223,11 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 	return tx.Commit()
 }
 
-func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
+func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
 	if opts.Prefix != nil {
-		return newPrefixIter(d.values, opts.Prefix, opts.Reverse, d.getVersion())
+		return newPrefixIter(d.values, opts.Prefix, opts.Reverse, d.getVersion()), nil
 	}
-	return newRangeIter(d.values, opts.Start, opts.End, opts.Reverse, d.getVersion())
+	return newRangeIter(d.values, opts.Start, opts.End, opts.Reverse, d.getVersion()), nil
 }
 
 // purgeOldVersions will execute the purge once a day or when explicitly requested.

@@ -81,9 +81,13 @@ func (b *Datastore) Close() error {
 	return b.db.Close()
 }
 
-func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
+func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
 	txn := b.newTxn(true)
-	it := txn.iterator(iterOpts)
+
+	it, err := txn.iterator(iterOpts)
+	if err != nil {
+		return nil, err
+	}
 
 	// closer for discarding implicit txn
 	// so that the txn is discarded when the
@@ -91,8 +95,8 @@ func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) c
 	it.withCloser(func() error {
 		return txn.Discard()
 	})
-	return it
 
+	return it, nil
 }
 
 func (d *Datastore) DropAll() error {
@@ -104,11 +108,15 @@ func (b *Datastore) NewTxn(readonly bool) corekv.Txn {
 }
 
 func (b *Datastore) newTxn(readonly bool) *bTxn {
-	return &bTxn{b.db.NewTransaction(!readonly)}
+	return &bTxn{
+		t: b.db.NewTransaction(!readonly),
+		d: b,
+	}
 }
 
 type bTxn struct {
 	t *badger.Txn
+	d *Datastore
 }
 
 func (txn *bTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -132,15 +140,15 @@ func (txn *bTxn) Has(ctx context.Context, key []byte) (bool, error) {
 	}
 }
 
-func (txn *bTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
+func (txn *bTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
 	return txn.iterator(iterOpts)
 }
 
-func (txn *bTxn) iterator(iopts corekv.IterOptions) iteratorCloser {
+func (txn *bTxn) iterator(iopts corekv.IterOptions) (iteratorCloser, error) {
 	if iopts.Prefix != nil {
-		return newPrefixIterator(txn, iopts.Prefix, iopts.Reverse, iopts.KeysOnly)
+		return newPrefixIterator(txn, iopts.Prefix, iopts.Reverse, iopts.KeysOnly), nil
 	}
-	return newRangeIterator(txn, iopts.Start, iopts.End, iopts.Reverse, iopts.KeysOnly)
+	return newRangeIterator(txn, iopts.Start, iopts.End, iopts.Reverse, iopts.KeysOnly), nil
 }
 
 func (txn *bTxn) Set(ctx context.Context, key []byte, value []byte) error {
