@@ -39,6 +39,9 @@ type SeekTo struct {
 	// The target key to seek to.
 	Target      []byte
 	ExpectValue bool
+
+	// The expected error message.
+	ExpectError string
 }
 
 var _ IteratorAction = (*SeekTo)(nil)
@@ -52,10 +55,23 @@ func Seek(target []byte, expectValue bool) *SeekTo {
 	}
 }
 
+// Seek returns a [SeekTo] iterator action that executes a single `Seek` call
+// on an [Iterator] to the given target and expects the given error.
+func SeekE(target []byte, expectError string) *SeekTo {
+	return &SeekTo{
+		Target:      target,
+		ExpectError: expectError,
+	}
+}
+
 func (a *SeekTo) Execute(s *state.State, iterator corekv.Iterator) {
 	hasValue, err := iterator.Seek(a.Target)
-	require.NoError(s.T, err)
+	if a.ExpectError != "" {
+		expectError(s, err, a.ExpectError)
+		return
+	}
 
+	require.NoError(s.T, err)
 	require.Equal(s.T, a.ExpectValue, hasValue)
 }
 
