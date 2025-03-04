@@ -33,7 +33,11 @@ var _ Action = (*Iterate)(nil)
 
 func (a *Iterate) Execute(s *state.State) {
 	iterator, err := s.Store.Iterator(s.Ctx, a.IterOptions)
-	require.NoError(s.T, err)
+	if err != nil {
+		expectError(s, err, a.ExpectedError)
+		require.Nil(s.T, iterator)
+		return
+	}
 
 	entries := make([]KeyValue, 0)
 	for {
