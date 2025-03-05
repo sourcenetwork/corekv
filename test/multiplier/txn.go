@@ -42,13 +42,23 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 	postCommitActions := action.Actions{}
 
 	for i, a := range source {
-		switch a.(type) {
+		switch typedA := a.(type) {
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
 			if firstCloseIndex == 0 {
 				firstCloseIndex = i
+			}
+
+		case *action.Iterator:
+		childLoop:
+			for _, childAction := range typedA.ChildActions {
+				switch childAction.(type) {
+				case *action.IteratorCloseRoot:
+					firstCloseIndex = i
+					break childLoop
+				}
 			}
 
 		case *action.CreateNewTxn:
@@ -158,9 +168,24 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 	result := make(action.Actions, len(source)+3)
 
 	for i, a := range source {
-		switch a.(type) {
+		switch typedA := a.(type) {
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
 			lastCreateStoreIndex = i
+
+		case *action.CancelCtx, *action.CloseStore:
+			if firstCloseIndex == 0 {
+				firstCloseIndex = i
+			}
+
+		case *action.Iterator:
+		childLoop:
+			for _, childAction := range typedA.ChildActions {
+				switch childAction.(type) {
+				case *action.IteratorCloseRoot:
+					firstCloseIndex = i
+					break childLoop
+				}
+			}
 
 		case *action.CreateNewTxn:
 			// If the action set already contains txns we should not adjust it
@@ -180,8 +205,8 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 				indexOffset += 1
 			}
 
-		case *action.CancelCtx, *action.CloseStore:
-			if firstCloseIndex == 0 {
+		default:
+			if i == firstCloseIndex {
 				firstCloseIndex = i
 
 				result[newIndex] = action.Discard()
@@ -193,10 +218,7 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 				newIndex = i + indexOffset
 			}
 
-			result[newIndex] = a
-
-		default:
-			if i > lastCreateStoreIndex && firstCloseIndex == 0 {
+			if i > lastCreateStoreIndex && i < firstCloseIndex {
 				result[newIndex] = action.WithTxn(a)
 			} else {
 				result[newIndex] = a
@@ -242,9 +264,24 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 	result := make(action.Actions, len(source)+4)
 
 	for i, a := range source {
-		switch a.(type) {
+		switch typedA := a.(type) {
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
 			lastCreateStoreIndex = i
+
+		case *action.CancelCtx, *action.CloseStore:
+			if firstCloseIndex == 0 {
+				firstCloseIndex = i
+			}
+
+		case *action.Iterator:
+		childLoop:
+			for _, childAction := range typedA.ChildActions {
+				switch childAction.(type) {
+				case *action.IteratorCloseRoot:
+					firstCloseIndex = i
+					break childLoop
+				}
+			}
 
 		case *action.CreateNewTxn:
 			// If the action set already contains txns we should not adjust it
@@ -265,10 +302,8 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 				indexOffset += 2
 			}
 
-		case *action.CancelCtx, *action.CloseStore:
-			if firstCloseIndex == 0 {
-				firstCloseIndex = i
-
+		default:
+			if i == firstCloseIndex {
 				result[newIndex] = action.WithTxnI(
 					&action.Iterate{
 						Expected: []action.KeyValue{},
@@ -282,10 +317,7 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 				newIndex = i + indexOffset
 			}
 
-			result[newIndex] = a
-
-		default:
-			if i > lastCreateStoreIndex && firstCloseIndex == 0 {
+			if i > lastCreateStoreIndex && i < firstCloseIndex {
 				result[newIndex] = action.WithTxnI(a, primaryTxnID)
 			} else {
 				result[newIndex] = a

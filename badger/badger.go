@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 
@@ -12,6 +13,12 @@ import (
 
 type Datastore struct {
 	db *badger.DB
+
+	// Badger panics when creating a new iterator if the store has closed, instead of returning an error
+	// like it does everywhere else.  We would much rather error than panic, so we have to track closed-ness
+	// ourself on top of the badger tracking.
+	closed  bool
+	closeLk sync.RWMutex
 }
 
 var _ corekv.TxnStore = (*Datastore)(nil)
@@ -78,12 +85,20 @@ func (b *Datastore) Delete(ctx context.Context, key []byte) error {
 }
 
 func (b *Datastore) Close() error {
+	b.closeLk.Lock()
+	defer b.closeLk.Unlock()
+	b.closed = true
+
 	return b.db.Close()
 }
 
-func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
+func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
 	txn := b.newTxn(true)
-	it := txn.iterator(iterOpts)
+
+	it, err := txn.iterator(iterOpts)
+	if err != nil {
+		return nil, err
+	}
 
 	// closer for discarding implicit txn
 	// so that the txn is discarded when the
@@ -91,8 +106,8 @@ func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) c
 	it.withCloser(func() error {
 		return txn.Discard()
 	})
-	return it
 
+	return it, nil
 }
 
 func (d *Datastore) DropAll() error {
@@ -104,11 +119,15 @@ func (b *Datastore) NewTxn(readonly bool) corekv.Txn {
 }
 
 func (b *Datastore) newTxn(readonly bool) *bTxn {
-	return &bTxn{b.db.NewTransaction(!readonly)}
+	return &bTxn{
+		t: b.db.NewTransaction(!readonly),
+		d: b,
+	}
 }
 
 type bTxn struct {
 	t *badger.Txn
+	d *Datastore
 }
 
 func (txn *bTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -132,15 +151,21 @@ func (txn *bTxn) Has(ctx context.Context, key []byte) (bool, error) {
 	}
 }
 
-func (txn *bTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) corekv.Iterator {
+func (txn *bTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
 	return txn.iterator(iterOpts)
 }
 
-func (txn *bTxn) iterator(iopts corekv.IterOptions) iteratorCloser {
-	if iopts.Prefix != nil {
-		return newPrefixIterator(txn, iopts.Prefix, iopts.Reverse, iopts.KeysOnly)
+func (txn *bTxn) iterator(iopts corekv.IterOptions) (iteratorCloser, error) {
+	txn.d.closeLk.RLock()
+	defer txn.d.closeLk.RUnlock()
+	if txn.d.closed {
+		return nil, corekv.ErrDBClosed
 	}
-	return newRangeIterator(txn, iopts.Start, iopts.End, iopts.Reverse, iopts.KeysOnly)
+
+	if iopts.Prefix != nil {
+		return newPrefixIterator(txn, iopts.Prefix, iopts.Reverse, iopts.KeysOnly), nil
+	}
+	return newRangeIterator(txn, iopts.Start, iopts.End, iopts.Reverse, iopts.KeysOnly), nil
 }
 
 func (txn *bTxn) Set(ctx context.Context, key []byte, value []byte) error {

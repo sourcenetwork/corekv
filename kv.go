@@ -70,7 +70,7 @@ type Reader interface {
 	Has(ctx context.Context, key []byte) (bool, error)
 
 	// Iterator returns a read-only iterator using the given options.
-	Iterator(ctx context.Context, opts IterOptions) Iterator
+	Iterator(ctx context.Context, opts IterOptions) (Iterator, error)
 }
 
 // Writer contains functions for mutating values within a store.

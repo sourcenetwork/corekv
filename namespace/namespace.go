@@ -116,7 +116,7 @@ func prefixed(prefix, key []byte) []byte {
 }
 
 // Iterator creates a new iterator instance
-func (nstore *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) corekv.Iterator {
+func (nstore *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
 	if opts.Prefix != nil {
 		opts.Prefix = nstore.prefixed(opts.Prefix)
 	} else if opts.Start != nil || opts.End != nil {
@@ -135,10 +135,15 @@ func (nstore *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) 
 		opts.Prefix = nstore.prefixed(opts.Prefix)
 	}
 
+	iterator, err := nstore.store.Iterator(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	return &namespaceIterator{
 		namespace: nstore.namespace,
-		it:        nstore.store.Iterator(ctx, opts),
-	}
+		it:        iterator,
+	}, nil
 }
 
 type namespaceIterator struct {

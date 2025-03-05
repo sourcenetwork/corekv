@@ -14,6 +14,7 @@ type iteratorCloser interface {
 }
 
 type iterator struct {
+	txn      *bTxn
 	i        *badger.Iterator
 	start    []byte
 	end      []byte
@@ -32,6 +33,7 @@ func newPrefixIterator(txn *bTxn, prefix []byte, reverse, keysOnly bool) *iterat
 	opt.PrefetchValues = !keysOnly
 
 	return &iterator{
+		txn:      txn,
 		i:        txn.t.NewIterator(opt),
 		start:    prefix,
 		end:      bytesPrefixEnd(prefix),
@@ -47,6 +49,7 @@ func newRangeIterator(txn *bTxn, start, end []byte, reverse, keysOnky bool) *ite
 	opt.PrefetchValues = !keysOnky
 
 	return &iterator{
+		txn:      txn,
 		i:        txn.t.NewIterator(opt),
 		start:    start,
 		end:      end,
@@ -66,9 +69,9 @@ func (it *iterator) restart() (bool, error) {
 	it.reset = false
 
 	if it.reverse {
-		return it.Seek(it.end)
+		return it.seek(it.end)
 	} else {
-		return it.Seek(it.start)
+		return it.seek(it.start)
 	}
 }
 
@@ -89,6 +92,21 @@ func (it *iterator) valid() bool {
 }
 
 func (it *iterator) Next() (bool, error) {
+	it.txn.d.closeLk.RLock()
+	defer it.txn.d.closeLk.RUnlock()
+	if it.txn.d.closed {
+		return false, corekv.ErrDBClosed
+	}
+
+	return it.next()
+}
+
+// next bypasses the RLock (`closeLk`) that `next“, via `restart`, uses.
+// It should only ever be called if the `closeLk` is already held.
+//
+// It exists because RLocking a single mutex multiple times from the same routine
+// before unlocking it causes deadlocks.
+func (it *iterator) next() (bool, error) {
 	if it.reset {
 		return it.restart()
 	}
@@ -116,6 +134,21 @@ func (it *iterator) Value() ([]byte, error) {
 }
 
 func (it *iterator) Seek(key []byte) (bool, error) {
+	it.txn.d.closeLk.RLock()
+	defer it.txn.d.closeLk.RUnlock()
+	if it.txn.d.closed {
+		return false, corekv.ErrDBClosed
+	}
+
+	return it.seek(key)
+}
+
+// seek bypasses the RLock (`closeLk`) that Seek uses.  It should only ever be called
+// if the `closeLk` is already held.
+//
+// It exists because RLocking a single mutex multiple times from the same routine
+// before unlocking it causes deadlocks.
+func (it *iterator) seek(key []byte) (bool, error) {
 	// Clear the reset property, else if Next was call following Seek,
 	// Next may incorrectly return to the beginning.
 	it.reset = false
@@ -142,7 +175,7 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 	it.i.Seek(target)
 
 	if !it.valid() {
-		return it.Next()
+		return it.next()
 	}
 
 	return true, nil

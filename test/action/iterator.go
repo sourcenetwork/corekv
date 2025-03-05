@@ -18,13 +18,14 @@ type Iterator struct {
 var _ Action = (*Iterator)(nil)
 
 func (a *Iterator) Execute(s *state.State) {
-	iterator := s.Store.Iterator(s.Ctx, a.IterOptions)
+	iterator, err := s.Store.Iterator(s.Ctx, a.IterOptions)
+	require.NoError(s.T, err)
 
 	for _, action := range a.ChildActions {
 		action.Execute(s, iterator)
 	}
 
-	err := iterator.Close()
+	err = iterator.Close()
 	require.NoError(s.T, err)
 }
 
@@ -38,6 +39,9 @@ type SeekTo struct {
 	// The target key to seek to.
 	Target      []byte
 	ExpectValue bool
+
+	// The expected error message.
+	ExpectError string
 }
 
 var _ IteratorAction = (*SeekTo)(nil)
@@ -51,16 +55,32 @@ func Seek(target []byte, expectValue bool) *SeekTo {
 	}
 }
 
+// Seek returns a [SeekTo] iterator action that executes a single `Seek` call
+// on an [Iterator] to the given target and expects the given error.
+func SeekE(target []byte, expectError string) *SeekTo {
+	return &SeekTo{
+		Target:      target,
+		ExpectError: expectError,
+	}
+}
+
 func (a *SeekTo) Execute(s *state.State, iterator corekv.Iterator) {
 	hasValue, err := iterator.Seek(a.Target)
-	require.NoError(s.T, err)
+	if a.ExpectError != "" {
+		expectError(s, err, a.ExpectError)
+		return
+	}
 
+	require.NoError(s.T, err)
 	require.Equal(s.T, a.ExpectValue, hasValue)
 }
 
 // MoveNext executes a single `Next` call on an an [Iterator].
 type MoveNext struct {
 	ExpectValue bool
+
+	// The expected error message.
+	ExpectError string
 }
 
 var _ IteratorAction = (*MoveNext)(nil)
@@ -73,10 +93,22 @@ func Next(expectValue bool) *MoveNext {
 	}
 }
 
+// Next returns a [MoveNext] iterator action that executes a single `Next` call
+// on an [Iterator] and expects the given error.
+func NextE(expectError string) *MoveNext {
+	return &MoveNext{
+		ExpectError: expectError,
+	}
+}
+
 func (a *MoveNext) Execute(s *state.State, iterator corekv.Iterator) {
 	hasValue, err := iterator.Next()
-	require.NoError(s.T, err)
+	if a.ExpectError != "" {
+		expectError(s, err, a.ExpectError)
+		return
+	}
 
+	require.NoError(s.T, err)
 	require.Equal(s.T, a.ExpectValue, hasValue)
 }
 
@@ -117,4 +149,21 @@ func Reset() *IteratorReset {
 
 func (a *IteratorReset) Execute(s *state.State, iterator corekv.Iterator) {
 	iterator.Reset()
+}
+
+// IteratorCloseRoot executes a single `Close` call on the underlying root store.
+type IteratorCloseRoot struct {
+	CloseStore
+}
+
+var _ IteratorAction = (*IteratorCloseRoot)(nil)
+
+// Reset returns a [IteratorCloseRoot] iterator action that executes a single `Close` call
+// on the underlying root store.
+func CloseRoot() *IteratorCloseRoot {
+	return &IteratorCloseRoot{}
+}
+
+func (a *IteratorCloseRoot) Execute(s *state.State, iterator corekv.Iterator) {
+	a.CloseStore.Execute(s)
 }
