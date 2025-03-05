@@ -44,29 +44,25 @@ func NewDatastoreFrom(db *badger.DB) *Datastore {
 
 func (b *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	txn := b.newTxn(true)
+	defer txn.Discard()
 
-	result, err := txn.Get(ctx, key)
-	dErr := txn.Discard()
-
-	return result, errors.Join(err, dErr)
+	return txn.Get(ctx, key)
 }
 
 func (b *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
 	txn := b.newTxn(true)
+	defer txn.Discard()
 
-	result, err := txn.Has(ctx, key)
-	dErr := txn.Discard()
-
-	return result, errors.Join(err, dErr)
+	return txn.Has(ctx, key)
 }
 
 func (b *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
 	txn := b.newTxn(false)
+	defer txn.Discard()
 
 	err := txn.Set(ctx, key, value)
 	if err != nil {
-		dErr := txn.Discard()
-		return errors.Join(err, dErr)
+		return err
 	}
 
 	return txn.Commit()
@@ -74,11 +70,11 @@ func (b *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
 
 func (b *Datastore) Delete(ctx context.Context, key []byte) error {
 	txn := b.newTxn(false)
+	defer txn.Discard()
 
 	err := txn.Delete(ctx, key)
 	if err != nil {
-		dErr := txn.Discard()
-		return errors.Join(err, dErr)
+		return err
 	}
 
 	return txn.Commit()
@@ -104,7 +100,8 @@ func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (
 	// so that the txn is discarded when the
 	// iterator is closed
 	it.withCloser(func() error {
-		return txn.Discard()
+		txn.Discard()
+		return nil
 	})
 
 	return it, nil
@@ -183,13 +180,13 @@ func (txn *bTxn) Commit() error {
 	return badgerErrToKVErr(err)
 }
 
-func (txn *bTxn) Discard() error {
+func (txn *bTxn) Discard() {
 	txn.t.Discard()
-	return nil
 }
 
 func (t *bTxn) Close() error {
-	return t.Discard()
+	t.Discard()
+	return nil
 }
 
 var badgerErrToKVErrMap = map[error]error{
