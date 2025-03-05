@@ -181,8 +181,8 @@ func (txn *Txn) Commit() error {
 	return txn.txn.Commit()
 }
 
-func (txn *Txn) Discard() error {
-	return txn.txn.Discard()
+func (txn *Txn) Discard() {
+	txn.txn.Discard()
 }
 
 func cp(bz []byte) (ret []byte) {

@@ -321,20 +321,19 @@ func (iter *txnIterator) Close() error {
 }
 
 func (t *basicTxn) Close() error {
-	return t.Discard()
+	t.Discard()
+	return nil
 }
 
 // Discard removes all the operations added to the transaction.
-func (t *basicTxn) Discard() error {
+func (t *basicTxn) Discard() {
 	if t.discarded {
-		return nil
+		return
 	}
 
 	t.ops.Clear()
 	t.clearInFlightTxn()
 	t.discarded = true
-
-	return nil
 }
 
 // Commit saves the operations to the underlying datastore.

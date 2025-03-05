@@ -167,5 +167,5 @@ type Txn interface {
 
 	// Discard discards all changes made via this object so far, returning
 	// it to the state it was at at time of construction.
-	Discard() error
+	Discard()
 }

@@ -127,8 +127,7 @@ func DiscardI(id int) *DiscardTxn {
 func (a *DiscardTxn) Execute(s *state.State) {
 	txn := s.Txns[a.ID]
 
-	err := txn.Discard()
-	require.NoError(s.T, err)
+	txn.Discard()
 }
 
 // CommitTxn commits the given transaction when executed.
