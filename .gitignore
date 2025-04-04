@@ -19,3 +19,8 @@
 
 # Go workspace file
 go.work
+
+array/libs/*.h
+array/libs/*.a
+array/internal/abi/target/
+.vscode/settings.json
