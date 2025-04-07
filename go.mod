@@ -1,11 +1,15 @@
 module github.com/sourcenetwork/corekv
 
-go 1.20
+go 1.21.3
+
+toolchain go1.24.0
 
 require (
 	github.com/dgraph-io/badger/v4 v4.2.0
-	github.com/ipfs/go-detect-race v0.0.1
-	github.com/stretchr/testify v1.8.4
+	github.com/sourcenetwork/goji v0.0.5
+	github.com/sourcenetwork/immutable v0.3.0
+	github.com/stretchr/testify v1.9.0
+	github.com/tidwall/btree v1.7.0
 )
 
 require (
@@ -23,8 +27,6 @@ require (
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sourcenetwork/immutable v0.3.0 // indirect
-	github.com/tidwall/btree v1.7.0 // indirect
 	go.opencensus.io v0.22.5 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect

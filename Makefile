@@ -2,6 +2,10 @@
 deps\:test-ci:
 	go install gotest.tools/gotestsum@latest
 
+.PHONY: deps\:test-js
+deps\:test-js:
+	go install github.com/agnivade/wasmbrowsertest@latest
+
 .PHONY: clean
 clean:
 	go clean -testcache
@@ -53,6 +57,21 @@ test\:ci:
 # We do not make the deps here, the ci does that seperately to avoid compiling stuff
 # multiple times etc.
 	gotestsum --format testname ./...
+
+.PHONY: test\:js
+test\:js:
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="indexed-db" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,indexed-db" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="indexed-db,txn-commit" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="indexed-db,txn-discard" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
+# @$(MAKE) clean
+# CORE_KV_MULTIPLIERS="indexed-db,txn-multi" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
+# @$(MAKE) clean
+# CORE_KV_MULTIPLIERS="namespace,indexed-db,txn-multi" GOOS=js GOARCH=wasm go test -exec wasmbrowsertest ./...
 
 .PHONY: test\:scripts
 test\:scripts:
