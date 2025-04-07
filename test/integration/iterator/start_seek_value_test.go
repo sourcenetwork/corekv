@@ -6,10 +6,14 @@ import (
 	"github.com/sourcenetwork/corekv"
 	"github.com/sourcenetwork/corekv/test/action"
 	"github.com/sourcenetwork/corekv/test/integration"
+	"github.com/sourcenetwork/corekv/test/multiplier"
 )
 
 func TestIteratortartSeekValue(t *testing.T) {
 	test := &integration.Test{
+		Excludes: []multiplier.Name{
+			multiplier.IndexedDB,
+		},
 		Actions: []action.Action{
 			action.Set([]byte("k1"), []byte("v1")),
 			action.Set([]byte("k3"), nil),

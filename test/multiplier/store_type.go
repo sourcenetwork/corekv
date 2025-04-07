@@ -7,6 +7,7 @@ import (
 func init() {
 	Register(&badger{})
 	Register(&memory{})
+	Register(&indexedDB{})
 }
 
 const Badger Name = "badger"
@@ -59,6 +60,35 @@ func (n *memory) Apply(source action.Actions) action.Actions {
 		_, ok := sourceAction.(*action.NewStore)
 		if ok {
 			result[i] = &action.NewMemoryStore{}
+		} else {
+			result[i] = sourceAction
+		}
+	}
+
+	return result
+}
+
+const IndexedDB Name = "indexed-db"
+
+// indexedDB represents the indexed_db store complexity multiplier.
+//
+// Applying the multiplier will replace all [action.NewStore] actions
+// with [action.NewIndexedDBStore] instances.
+type indexedDB struct{}
+
+var _ Multiplier = (*indexedDB)(nil)
+
+func (n *indexedDB) Name() Name {
+	return IndexedDB
+}
+
+func (n *indexedDB) Apply(source action.Actions) action.Actions {
+	result := make([]action.Action, len(source))
+
+	for i, sourceAction := range source {
+		_, ok := sourceAction.(*action.NewStore)
+		if ok {
+			result[i] = &action.NewIndexedDBStore{}
 		} else {
 			result[i] = sourceAction
 		}
