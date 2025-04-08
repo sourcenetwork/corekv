@@ -2,8 +2,6 @@ module github.com/sourcenetwork/corekv
 
 go 1.23.0
 
-toolchain go1.24.0
-
 require (
 	github.com/dgraph-io/badger/v4 v4.7.0
 	github.com/sourcenetwork/immutable v0.3.0
