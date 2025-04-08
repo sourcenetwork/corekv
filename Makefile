@@ -57,3 +57,7 @@ test\:ci:
 .PHONY: test\:scripts
 test\:scripts:
 	@$(MAKE) -C ./tools/scripts/ test
+
+.PHONY: test\:wasm
+test\:wasm:
+	GOOS=js GOARCH=wasm gotestsum --format testname -- -exec="$(shell go env GOROOT)/misc/wasm/go_js_wasm_exec" ./...
