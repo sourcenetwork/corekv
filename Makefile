@@ -2,11 +2,6 @@
 deps\:test-ci:
 	go install gotest.tools/gotestsum@latest
 
-.PHONY: deps\:test-browser
-deps\:test-browser:
-	@$(MAKE) deps:test-ci
-	go install github.com/agnivade/wasmbrowsertest@latest
-
 .PHONY: clean
 clean:
 	go clean -testcache
@@ -63,6 +58,6 @@ test\:ci:
 test\:scripts:
 	@$(MAKE) -C ./tools/scripts/ test
 
-.PHONY: test\:browser
-test\:browser:
-	GOOS=js GOARCH=wasm gotestsum --format testname -- -exec wasmbrowsertest ./...
+.PHONY: test\:wasm
+test\:wasm:
+	GOOS=js GOARCH=wasm gotestsum --format testname -- -exec="$(shell go env GOROOT)/lib/wasm/go_js_wasm_exec" ./...

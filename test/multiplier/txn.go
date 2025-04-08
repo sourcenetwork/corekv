@@ -67,16 +67,19 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 		}
 	}
 
+	newLastCreateStoreIndex := lastCreateStoreIndex
+	newFirstCloseIndex := firstCloseIndex
+
 	for i, a := range source {
 		switch a.(type) {
 		case *action.NamespaceStore:
 			newActions = append(newActions, a)
 			newActions = append(newActions, action.WithTxn(a))
 			if i < firstCloseIndex {
-				firstCloseIndex += 1
+				newFirstCloseIndex += 1
 			}
 			if i < lastCreateStoreIndex {
-				lastCreateStoreIndex += 1
+				newLastCreateStoreIndex += 1
 			}
 			continue
 
@@ -113,12 +116,12 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 			return i + indexOffset
 		}
 
-		if i == lastCreateStoreIndex {
+		if i == newLastCreateStoreIndex {
 			result[newIndex()] = a
 
 			indexOffset += 1
 			result[newIndex()] = action.NewTxn()
-		} else if i == firstCloseIndex {
+		} else if i == newFirstCloseIndex {
 			result[newIndex()] = action.Commit()
 			indexOffset += 1
 

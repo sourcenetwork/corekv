@@ -17,6 +17,7 @@ jobs:
 
     strategy:
         matrix:
+          target: [default, wasm]
           store: [memory, badger]
           namespace: [namespace, none]
           txn: [txn-commit, txn-discard, txn-multi, none]
@@ -41,7 +42,12 @@ jobs:
           make deps:test-ci
 
       - name: Run tests
+        if: ${{ matrix.target == "default" }}
         run: make test:ci
+
+      - name: Run WASM tests
+        if: ${{ matrix.target == "wasm" }}
+        run: make test:wasm
 
   tests-os:
     name: Run tests job
@@ -68,39 +74,3 @@ jobs:
 
       - name: Run tests
         run: make test:ci
-
-  test-browser:
-    name: Run browser tests job
-
-    strategy:
-        matrix:
-          store: [memory, badger]
-          namespace: [namespace, none]
-          txn: [txn-commit, txn-discard, txn-multi, none]
-
-    runs-on: ubuntu-latest
-
-    env:
-      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.txn }}
-
-    steps:
-      - name: Checkout code into the directory
-        uses: actions/checkout@v3
-
-      - name: Setup Go environment explicitly
-        uses: actions/setup-go@v3
-        with:
-          go-version: "1.21"
-          check-latest: true
-
-      - name: Build dependencies
-        run: |
-          make deps:test-browser
-
-      # Disable AppArmor for Ubuntu 23.10+.
-      # https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md
-      - name: Disable AppArmor
-        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-
-      - name: Run tests
-        run: make test:browser
