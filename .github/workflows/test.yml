@@ -42,11 +42,11 @@ jobs:
           make deps:test-ci
 
       - name: Run tests
-        if: ${{ matrix.target == "default" }}
+        if: ${{ matrix.target == 'default' }}
         run: make test:ci
 
       - name: Run WASM tests
-        if: ${{ matrix.target == "wasm" }}
+        if: ${{ matrix.target == 'wasm' }}
         run: make test:wasm
 
   tests-os:
