@@ -19,3 +19,11 @@
 
 # Go workspace file
 go.work
+
+array/libs/*.h
+array/libs/*.a
+array/internal/abi/target/
+timeseries/libs/*.h
+timeseries/libs/*.a
+timeseries/internal/abi/target/
+.vscode/settings.json
