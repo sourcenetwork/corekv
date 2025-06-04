@@ -93,7 +93,7 @@ func NewTxnI(id int) *CreateNewTxn {
 }
 
 func (a *CreateNewTxn) Execute(s *state.State) {
-	txn := s.Store.(corekv.TxnStore).NewTxn(a.ReadOnly)
+	txn := s.Store.(corekv.TxnReaderWriter).NewTxn(a.ReadOnly)
 
 	if a.ID >= len(s.Txns) {
 		// Expand the slice if needed.

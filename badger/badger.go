@@ -184,11 +184,6 @@ func (txn *bTxn) Discard() {
 	txn.t.Discard()
 }
 
-func (t *bTxn) Close() error {
-	t.Discard()
-	return nil
-}
-
 var badgerErrToKVErrMap = map[error]error{
 	badger.ErrEmptyKey:     corekv.ErrEmptyKey,
 	badger.ErrKeyNotFound:  corekv.ErrNotFound,

@@ -9,54 +9,17 @@ import (
 // Datastore wraps a namespace of another database as a logical database.
 type Datastore struct {
 	namespace []byte
-	store     corekv.Store
+	store     corekv.ReaderWriter
 }
 
-var _ corekv.Store = (*Datastore)(nil)
-
-type TxnStore struct {
-	Datastore
-
-	store corekv.TxnStore
-}
-
-var _ corekv.TxnStore = (*TxnStore)(nil)
-
-type Txn struct {
-	corekv.Store
-
-	txn corekv.Txn
-}
-
-var _ corekv.Txn = (*Txn)(nil)
+var _ corekv.ReaderWriter = (*Datastore)(nil)
 
 // Wrap lets you namespace a store with a given prefix.
-func Wrap(store corekv.Store, prefix []byte) *Datastore {
+func Wrap(store corekv.ReaderWriter, prefix []byte) *Datastore {
 	return &Datastore{
 		namespace: prefix,
 		store:     store,
 	}
-}
-
-// WrapTS lets you namespace a transaction store with a given prefix.
-func WrapTS(store corekv.TxnStore, prefix []byte) *TxnStore {
-	return &TxnStore{
-		Datastore: *Wrap(store, prefix),
-		store:     store,
-	}
-}
-
-// WrapTxn lets you namespace a transaction with a given prefix.
-func WrapTxn(txn corekv.Txn, prefix []byte) *Txn {
-	return &Txn{
-		Store: Wrap(txn, prefix),
-		txn:   txn,
-	}
-}
-
-func (nstore *TxnStore) NewTxn(readonly bool) corekv.Txn {
-	txn := nstore.store.NewTxn(readonly)
-	return WrapTxn(txn, nstore.namespace)
 }
 
 func (nstore *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -101,10 +64,6 @@ func (nstore *Datastore) Delete(ctx context.Context, key []byte) error {
 	pkey := nstore.prefixed(key)
 
 	return nstore.store.Delete(ctx, pkey)
-}
-
-func (nstore *Datastore) Close() error {
-	return nstore.store.Close()
 }
 
 func (nstore *Datastore) prefixed(key []byte) []byte {
@@ -175,14 +134,6 @@ func (nIter *namespaceIterator) Seek(key []byte) (bool, error) {
 
 func (nIter *namespaceIterator) Close() error {
 	return nIter.it.Close()
-}
-
-func (txn *Txn) Commit() error {
-	return txn.txn.Commit()
-}
-
-func (txn *Txn) Discard() {
-	txn.txn.Discard()
 }
 
 func cp(bz []byte) (ret []byte) {

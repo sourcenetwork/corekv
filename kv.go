@@ -87,6 +87,12 @@ type Writer interface {
 	Delete(ctx context.Context, key []byte) error
 }
 
+// ReaderWriter contains the functions for reading and writing values within the store.
+type ReaderWriter interface {
+	Reader
+	Writer
+}
+
 // Iterator is a read-only iterator that allows iteration over the underlying
 // store (or a part of it).
 //
@@ -137,8 +143,7 @@ type Dropable interface {
 
 // Store contains all the functions required for interacting with a store.
 type Store interface {
-	Reader
-	Writer
+	ReaderWriter
 
 	// Close disposes of any resources directly held by the store.
 	//
@@ -155,11 +160,20 @@ type TxnStore interface {
 	NewTxn(readonly bool) Txn
 }
 
+// TxnReaderWriter contains the functions for reading and writing values within the store
+// and supports transactions.
+type TxnReaderWriter interface {
+	ReaderWriter
+
+	// NewTxn returns a new transaction.
+	NewTxn(readonly bool) Txn
+}
+
 // Txn isolates changes made to the underlying store from this object,
 // and isolates changes made via this object from the underlying store
 // until `Commit` is called.
 type Txn interface {
-	Store
+	ReaderWriter
 
 	// Commit applies all changes made via this [Txn] to the underlying
 	// [Store].

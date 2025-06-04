@@ -13,7 +13,6 @@ package memory
 import (
 	"bytes"
 	"context"
-	"sync"
 	"sync/atomic"
 
 	"github.com/sourcenetwork/corekv"
@@ -28,9 +27,6 @@ type basicTxn struct {
 	dsVersion *uint64
 	readOnly  bool
 	discarded bool
-
-	closed  bool
-	closeLk sync.RWMutex
 }
 
 var _ corekv.Txn = (*basicTxn)(nil)
@@ -45,9 +41,9 @@ func (t *basicTxn) getTxnVersion() uint64 {
 
 // Delete implements ds.Delete.
 func (t *basicTxn) Delete(ctx context.Context, key []byte) error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return corekv.ErrDBClosed
 	}
 
@@ -90,9 +86,9 @@ func (t *basicTxn) get(key []byte) dsItem {
 
 // Get implements ds.Get.
 func (t *basicTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return nil, corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -111,9 +107,9 @@ func (t *basicTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
 
 // GetSize implements ds.GetSize.
 func (t *basicTxn) GetSize(ctx context.Context, key []byte) (size int, err error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return 0, corekv.ErrDBClosed
 	}
 
@@ -133,9 +129,9 @@ func (t *basicTxn) GetSize(ctx context.Context, key []byte) (size int, err error
 
 // Has implements ds.Has.
 func (t *basicTxn) Has(ctx context.Context, key []byte) (exists bool, err error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return false, corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -154,9 +150,9 @@ func (t *basicTxn) Has(ctx context.Context, key []byte) (exists bool, err error)
 
 // Set implements ds.Set.
 func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -174,9 +170,9 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 }
 
 func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return nil, corekv.ErrDBClosed
 	}
 
@@ -193,6 +189,63 @@ func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corek
 		txnIter:   newRangeIter(t.ds, t.ops, opts.Start, opts.End, opts.Reverse, t.getTxnVersion()),
 		storeIter: newRangeIter(t.ds, t.ds.values, opts.Start, opts.End, opts.Reverse, t.getDSVersion()),
 	}, nil
+}
+
+// Discard removes all the operations added to the transaction.
+func (t *basicTxn) Discard() {
+	if t.discarded {
+		return
+	}
+
+	t.ops.Clear()
+	t.clearInFlightTxn()
+	t.discarded = true
+}
+
+// Commit saves the operations to the underlying datastore.
+func (t *basicTxn) Commit() error {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return corekv.ErrDBClosed
+	}
+
+	if t.discarded {
+		return corekv.ErrDiscardedTxn
+	}
+	defer t.Discard()
+
+	if !t.readOnly {
+		return t.ds.commit(t)
+	}
+
+	return nil
+}
+
+func (t *basicTxn) checkForConflicts() error {
+	if t.getDSVersion() == t.ds.getVersion() {
+		return nil
+	}
+	iter := t.ops.Iter()
+	defer iter.Release()
+	for iter.Next() {
+		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
+		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
+		if latestItem.version != expectedItem.version {
+			return corekv.ErrTxnConflict
+		}
+	}
+	return nil
+}
+
+func (t *basicTxn) clearInFlightTxn() {
+	t.ds.inFlightTxn.Delete(
+		dsTxn{
+			dsVersion:  t.getDSVersion(),
+			txnVersion: t.getTxnVersion(),
+		},
+	)
+	t.ds.clearOldInFlightTxn()
 }
 
 type txnIterator struct {
@@ -318,72 +371,4 @@ func (iter *txnIterator) Close() error {
 	}
 
 	return iter.storeIter.Close()
-}
-
-func (t *basicTxn) Close() error {
-	t.Discard()
-	return nil
-}
-
-// Discard removes all the operations added to the transaction.
-func (t *basicTxn) Discard() {
-	if t.discarded {
-		return
-	}
-
-	t.ops.Clear()
-	t.clearInFlightTxn()
-	t.discarded = true
-}
-
-// Commit saves the operations to the underlying datastore.
-func (t *basicTxn) Commit() error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
-		return corekv.ErrDBClosed
-	}
-
-	if t.discarded {
-		return corekv.ErrDiscardedTxn
-	}
-	defer t.Discard()
-
-	if !t.readOnly {
-		return t.ds.commit(t)
-	}
-
-	return nil
-}
-
-func (t *basicTxn) checkForConflicts() error {
-	if t.getDSVersion() == t.ds.getVersion() {
-		return nil
-	}
-	iter := t.ops.Iter()
-	defer iter.Release()
-	for iter.Next() {
-		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
-		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
-		if latestItem.version != expectedItem.version {
-			return corekv.ErrTxnConflict
-		}
-	}
-	return nil
-}
-
-func (t *basicTxn) clearInFlightTxn() {
-	t.ds.inFlightTxn.Delete(
-		dsTxn{
-			dsVersion:  t.getDSVersion(),
-			txnVersion: t.getTxnVersion(),
-		},
-	)
-	t.ds.clearOldInFlightTxn()
-}
-
-func (t *basicTxn) close() {
-	t.closeLk.Lock()
-	defer t.closeLk.Unlock()
-	t.closed = true
 }
