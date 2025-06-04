@@ -195,6 +195,74 @@ func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corek
 	}, nil
 }
 
+func (t *basicTxn) Close() error {
+	t.Discard()
+	return nil
+}
+
+// Discard removes all the operations added to the transaction.
+func (t *basicTxn) Discard() {
+	if t.discarded {
+		return
+	}
+
+	t.ops.Clear()
+	t.clearInFlightTxn()
+	t.discarded = true
+}
+
+// Commit saves the operations to the underlying datastore.
+func (t *basicTxn) Commit() error {
+	t.closeLk.RLock()
+	defer t.closeLk.RUnlock()
+	if t.closed {
+		return corekv.ErrDBClosed
+	}
+
+	if t.discarded {
+		return corekv.ErrDiscardedTxn
+	}
+	defer t.Discard()
+
+	if !t.readOnly {
+		return t.ds.commit(t)
+	}
+
+	return nil
+}
+
+func (t *basicTxn) checkForConflicts() error {
+	if t.getDSVersion() == t.ds.getVersion() {
+		return nil
+	}
+	iter := t.ops.Iter()
+	defer iter.Release()
+	for iter.Next() {
+		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
+		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
+		if latestItem.version != expectedItem.version {
+			return corekv.ErrTxnConflict
+		}
+	}
+	return nil
+}
+
+func (t *basicTxn) clearInFlightTxn() {
+	t.ds.inFlightTxn.Delete(
+		dsTxn{
+			dsVersion:  t.getDSVersion(),
+			txnVersion: t.getTxnVersion(),
+		},
+	)
+	t.ds.clearOldInFlightTxn()
+}
+
+func (t *basicTxn) close() {
+	t.closeLk.Lock()
+	defer t.closeLk.Unlock()
+	t.closed = true
+}
+
 type txnIterator struct {
 	opts corekv.IterOptions
 
@@ -318,72 +386,4 @@ func (iter *txnIterator) Close() error {
 	}
 
 	return iter.storeIter.Close()
-}
-
-func (t *basicTxn) Close() error {
-	t.Discard()
-	return nil
-}
-
-// Discard removes all the operations added to the transaction.
-func (t *basicTxn) Discard() {
-	if t.discarded {
-		return
-	}
-
-	t.ops.Clear()
-	t.clearInFlightTxn()
-	t.discarded = true
-}
-
-// Commit saves the operations to the underlying datastore.
-func (t *basicTxn) Commit() error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
-		return corekv.ErrDBClosed
-	}
-
-	if t.discarded {
-		return corekv.ErrDiscardedTxn
-	}
-	defer t.Discard()
-
-	if !t.readOnly {
-		return t.ds.commit(t)
-	}
-
-	return nil
-}
-
-func (t *basicTxn) checkForConflicts() error {
-	if t.getDSVersion() == t.ds.getVersion() {
-		return nil
-	}
-	iter := t.ops.Iter()
-	defer iter.Release()
-	for iter.Next() {
-		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
-		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
-		if latestItem.version != expectedItem.version {
-			return corekv.ErrTxnConflict
-		}
-	}
-	return nil
-}
-
-func (t *basicTxn) clearInFlightTxn() {
-	t.ds.inFlightTxn.Delete(
-		dsTxn{
-			dsVersion:  t.getDSVersion(),
-			txnVersion: t.getTxnVersion(),
-		},
-	)
-	t.ds.clearOldInFlightTxn()
-}
-
-func (t *basicTxn) close() {
-	t.closeLk.Lock()
-	defer t.closeLk.Unlock()
-	t.closed = true
 }
