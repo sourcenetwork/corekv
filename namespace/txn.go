@@ -34,15 +34,11 @@ type TxnStore struct {
 	store corekv.TxnStore
 }
 
-var _ corekv.TxnStore = (*TxnStore)(nil)
+var _ corekv.TxnReaderWriter = (*TxnStore)(nil)
 
 func (ntxn *TxnStore) NewTxn(readonly bool) corekv.Txn {
 	txn := ntxn.store.NewTxn(readonly)
 	return WrapTxn(txn, ntxn.namespace)
-}
-
-func (ntxn *TxnStore) Close() error {
-	return ntxn.store.Close()
 }
 
 // WrapTS lets you namespace a transaction store with a given prefix.

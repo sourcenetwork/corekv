@@ -160,6 +160,15 @@ type TxnStore interface {
 	NewTxn(readonly bool) Txn
 }
 
+// TxnReaderWriter contains the functions for reading and writing values within the store
+// and supports transactions.
+type TxnReaderWriter interface {
+	ReaderWriter
+
+	// NewTxn returns a new transaction.
+	NewTxn(readonly bool) Txn
+}
+
 // Txn isolates changes made to the underlying store from this object,
 // and isolates changes made via this object from the underlying store
 // until `Commit` is called.
