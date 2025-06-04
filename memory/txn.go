@@ -13,7 +13,6 @@ package memory
 import (
 	"bytes"
 	"context"
-	"sync"
 	"sync/atomic"
 
 	"github.com/sourcenetwork/corekv"
@@ -28,9 +27,6 @@ type basicTxn struct {
 	dsVersion *uint64
 	readOnly  bool
 	discarded bool
-
-	closed  bool
-	closeLk sync.RWMutex
 }
 
 var _ corekv.Txn = (*basicTxn)(nil)
@@ -45,9 +41,9 @@ func (t *basicTxn) getTxnVersion() uint64 {
 
 // Delete implements ds.Delete.
 func (t *basicTxn) Delete(ctx context.Context, key []byte) error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return corekv.ErrDBClosed
 	}
 
@@ -90,9 +86,9 @@ func (t *basicTxn) get(key []byte) dsItem {
 
 // Get implements ds.Get.
 func (t *basicTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return nil, corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -111,9 +107,9 @@ func (t *basicTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
 
 // GetSize implements ds.GetSize.
 func (t *basicTxn) GetSize(ctx context.Context, key []byte) (size int, err error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return 0, corekv.ErrDBClosed
 	}
 
@@ -133,9 +129,9 @@ func (t *basicTxn) GetSize(ctx context.Context, key []byte) (size int, err error
 
 // Has implements ds.Has.
 func (t *basicTxn) Has(ctx context.Context, key []byte) (exists bool, err error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return false, corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -154,9 +150,9 @@ func (t *basicTxn) Has(ctx context.Context, key []byte) (exists bool, err error)
 
 // Set implements ds.Set.
 func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return corekv.ErrDBClosed
 	}
 	if t.discarded {
@@ -174,9 +170,9 @@ func (t *basicTxn) Set(ctx context.Context, key []byte, value []byte) error {
 }
 
 func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return nil, corekv.ErrDBClosed
 	}
 
@@ -195,11 +191,6 @@ func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corek
 	}, nil
 }
 
-func (t *basicTxn) Close() error {
-	t.Discard()
-	return nil
-}
-
 // Discard removes all the operations added to the transaction.
 func (t *basicTxn) Discard() {
 	if t.discarded {
@@ -213,9 +204,9 @@ func (t *basicTxn) Discard() {
 
 // Commit saves the operations to the underlying datastore.
 func (t *basicTxn) Commit() error {
-	t.closeLk.RLock()
-	defer t.closeLk.RUnlock()
-	if t.closed {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
 		return corekv.ErrDBClosed
 	}
 
@@ -255,12 +246,6 @@ func (t *basicTxn) clearInFlightTxn() {
 		},
 	)
 	t.ds.clearOldInFlightTxn()
-}
-
-func (t *basicTxn) close() {
-	t.closeLk.Lock()
-	defer t.closeLk.Unlock()
-	t.closed = true
 }
 
 type txnIterator struct {

@@ -101,14 +101,6 @@ func (d *Datastore) Close() error {
 
 	d.closed = true
 	close(d.closing)
-
-	iter := d.inFlightTxn.Iter()
-
-	for iter.Next() {
-		iter.Item().txn.close()
-	}
-	iter.Release()
-
 	return nil
 }
 
