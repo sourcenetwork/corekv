@@ -67,5 +67,6 @@ tidy:
 	(cd ./memory && go mod tidy) 
 	(cd ./namespace && go mod tidy) 
 	(cd ./badger && go mod tidy) 
+	(cd ./blockstore && go mod tidy) 
 	(cd ./test && go mod tidy)
 	go mod tidy
