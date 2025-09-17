@@ -60,4 +60,12 @@ test\:scripts:
 
 .PHONY: test\:wasm
 test\:wasm:
-	GOOS=js GOARCH=wasm gotestsum --format testname -- -exec="$(shell go env GOROOT)/misc/wasm/go_js_wasm_exec" ./...
+	GOOS=js GOARCH=wasm gotestsum --format testname -- -exec="$(shell go env GOROOT)/lib/wasm/go_js_wasm_exec" ./...
+
+.PHONY: tidy
+tidy:
+	(cd ./memory && go mod tidy) 
+	(cd ./namespace && go mod tidy) 
+	(cd ./badger && go mod tidy) 
+	(cd ./test && go mod tidy)
+	go mod tidy

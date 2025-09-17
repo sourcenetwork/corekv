@@ -47,7 +47,7 @@ jobs:
 
       - name: Make executable
         if: ${{ matrix.target == 'wasm' }}
-        run: chmod +x $(go env GOROOT)/misc/wasm/go_js_wasm_exec
+        run: chmod +x $(go env GOROOT)/lib/wasm/go_js_wasm_exec
 
       - name: Run WASM tests
         if: ${{ matrix.target == 'wasm' }}
