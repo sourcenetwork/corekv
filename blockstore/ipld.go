@@ -13,6 +13,7 @@
 package blockstore
 
 import (
+	"github.com/ipfs/boxo/blockstore"
 	"github.com/ipld/go-ipld-prime/storage"
 	"github.com/ipld/go-ipld-prime/storage/bsadapter"
 )
@@ -24,6 +25,6 @@ type IPLDStore interface {
 }
 
 // NewIPLDStore wraps a Blockstore as an IPLDStore.
-func NewIPLDStore(store *Blockstore) IPLDStore {
+func NewIPLDStore(store blockstore.Blockstore) IPLDStore {
 	return &bsadapter.Adapter{Wrapped: store}
 }
