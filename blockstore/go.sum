@@ -37,6 +37,10 @@ github.com/ipfs/go-metrics-interface v0.3.0 h1:YwG7/Cy4R94mYDUuwsBfeziJCVm9pBMJ6
 github.com/ipfs/go-metrics-interface v0.3.0/go.mod h1:OxxQjZDGocXVdyTPocns6cOLwHieqej/jos7H4POwoY=
 github.com/ipfs/go-test v0.2.2 h1:1yjYyfbdt1w93lVzde6JZ2einh3DIV40at4rVoyEcE8=
 github.com/ipfs/go-test v0.2.2/go.mod h1:cmLisgVwkdRCnKu/CFZOk2DdhOcwghr5GsHeqwexoRA=
+github.com/ipld/go-ipld-prime v0.21.0 h1:n4JmcpOlPDIxBcY037SVfpd1G+Sj1nKZah0m6QH9C2E=
+github.com/ipld/go-ipld-prime v0.21.0/go.mod h1:3RLqy//ERg/y5oShXXdx5YIp50cFGOanyMctpPjsvxQ=
+github.com/ipld/go-ipld-prime/storage/bsadapter v0.0.0-20250821084354-a425e60cd714 h1:cqNk8PEwHnK0vqWln+U/YZhQc9h2NB3KjUjDPZo5Q2s=
+github.com/ipld/go-ipld-prime/storage/bsadapter v0.0.0-20250821084354-a425e60cd714/go.mod h1:ZEUdra3CoqRVRYgAX/jAJO9aZGz6SKtKEG628fHHktY=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/libp2p/go-buffer-pool v0.1.0 h1:oK4mSFcQz7cTQIfqbe4MIj9gLW+mnanjyFtc6cdF0Y8=
