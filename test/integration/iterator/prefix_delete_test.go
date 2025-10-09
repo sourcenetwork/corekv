@@ -6,10 +6,15 @@ import (
 	"github.com/sourcenetwork/corekv"
 	"github.com/sourcenetwork/corekv/test/action"
 	"github.com/sourcenetwork/corekv/test/integration"
+	"github.com/sourcenetwork/corekv/test/multiplier"
 )
 
 func TestIteratorPrefixDelete(t *testing.T) {
 	test := &integration.Test{
+		Excludes: []multiplier.Name{
+			// The chunk store only supports keys of a constant length
+			multiplier.Chunk,
+		},
 		Actions: []action.Action{
 			action.Set([]byte("1"), []byte("v1")),
 			action.Set([]byte("k3"), nil),
@@ -35,6 +40,10 @@ func TestIteratorPrefixDelete(t *testing.T) {
 
 func TestIteratorPrefixDelete_DeleteLastItem(t *testing.T) {
 	test := &integration.Test{
+		Excludes: []multiplier.Name{
+			// The chunk store only supports keys of a constant length
+			multiplier.Chunk,
+		},
 		Actions: []action.Action{
 			action.Set([]byte("1"), []byte("v1")),
 			action.Set([]byte("k3"), nil),
