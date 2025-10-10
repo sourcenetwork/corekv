@@ -29,7 +29,7 @@ func (a *NamespaceStore) Execute(s *state.State) {
 	case corekv.Txn:
 		s.Store = namespace.WrapTxn(store, a.Namespace)
 
-	case corekv.TxnStore:
+	case corekv.TxnReaderWriter:
 		s.Store = namespace.WrapTS(store, a.Namespace)
 
 	default:

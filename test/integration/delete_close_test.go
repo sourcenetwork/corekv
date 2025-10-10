@@ -26,6 +26,9 @@ func TestDeleteClose_BadgerStoreDeleteOnClosedStore_Errors(t *testing.T) {
 		Includes: []string{
 			multiplier.Badger,
 		},
+		Excludes: []string{
+			multiplier.Chunk,
+		},
 		Actions: []action.Action{
 			action.Close(),
 			action.DeleteE([]byte("does not matter"), "Writes are blocked, possibly due to DropAll or Close"),

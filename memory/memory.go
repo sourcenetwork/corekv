@@ -40,7 +40,6 @@ type dsItem struct {
 }
 
 func byKeys(a, b dsItem) bool {
-	// fmt.Println("compare:", string(a.key), string(b.key))
 	cmp := bytes.Compare(a.key, b.key)
 	if cmp == -1 { // a < b
 		return true

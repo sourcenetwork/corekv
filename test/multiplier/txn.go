@@ -72,7 +72,7 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch a.(type) {
-		case *action.NamespaceStore:
+		case *action.NamespaceStore, *action.ChunkStore:
 			newActions = append(newActions, a)
 			newActions = append(newActions, action.WithTxn(a))
 			if i < firstCloseIndex {

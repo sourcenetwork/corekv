@@ -20,12 +20,13 @@ jobs:
           target: [default, wasm]
           store: [memory, badger]
           namespace: [namespace, none]
+          chunk: [chunk, none]
           txn: [txn-commit, txn-discard, txn-multi, none]
 
     runs-on: ubuntu-latest
 
     env:
-      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.txn }}
+      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.chunk }},${{ matrix.txn }}
 
     steps:
       - name: Checkout code into the directory

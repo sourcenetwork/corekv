@@ -31,7 +31,7 @@ func (ntxn *Txn) Discard() {
 type TxnStore struct {
 	Datastore
 
-	store corekv.TxnStore
+	store corekv.TxnReaderWriter
 }
 
 var _ corekv.TxnReaderWriter = (*TxnStore)(nil)
@@ -42,7 +42,7 @@ func (ntxn *TxnStore) NewTxn(readonly bool) corekv.Txn {
 }
 
 // WrapTS lets you namespace a transaction store with a given prefix.
-func WrapTS(store corekv.TxnStore, prefix []byte) *TxnStore {
+func WrapTS(store corekv.TxnReaderWriter, prefix []byte) *TxnStore {
 	return &TxnStore{
 		Datastore: *Wrap(store, prefix),
 		store:     store,
