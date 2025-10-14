@@ -201,7 +201,7 @@ func (s *Chunkstore) Delete(ctx context.Context, key []byte) error {
 	for _, key := range keys {
 		err = s.store.Delete(ctx, key)
 		if err != nil {
-			return errors.Join(err, it.Close())
+			return err
 		}
 	}
 
