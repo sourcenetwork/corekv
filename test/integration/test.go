@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	multiplier.Init("CORE_KV_MULTIPLIERS", "memory", "chunk")
+	multiplier.Init("CORE_KV_MULTIPLIERS", "memory")
 }
 
 // Test is a single, self-contained, test.
