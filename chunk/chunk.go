@@ -28,7 +28,7 @@ var _ corekv.ReaderWriter = (*Chunkstore)(nil)
 
 // New wraps the given ReaderWriter in a new Chunkstore.
 //
-// The lenLen is determined dynamically.  If the store already contains values,
+// The keyLen is determined dynamically.  If the store already contains values,
 // keyLen will be set to the length of the first iterated value minus one (it
 // assumes chunkstore key format).
 func New(
