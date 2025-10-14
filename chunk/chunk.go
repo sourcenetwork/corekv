@@ -137,27 +137,30 @@ func (s *Chunkstore) Has(ctx context.Context, key []byte) (bool, error) {
 }
 
 func (s *Chunkstore) Set(ctx context.Context, key []byte, value []byte) error {
-	if s.keyLen == 0 {
-		// If this is the first write, set the length of keys
-		s.keyLen = len(key)
-	}
-
 	// Append a zero-byte to the end of the key, all keys must have at least a zero-suffix,
 	// this makes deconstructing them a lot simpler.
 	chunkKey := append(key, byte(0))
 
 	if len(value) == 0 {
 		// If an empty value has been provided
-		return s.store.Set(ctx, chunkKey, value)
-	}
-
-	for chunk := range slices.Chunk(value, s.chunkSize) {
-		err := s.store.Set(ctx, chunkKey, chunk)
+		err := s.store.Set(ctx, chunkKey, value)
 		if err != nil {
 			return err
 		}
+	} else {
+		for chunk := range slices.Chunk(value, s.chunkSize) {
+			err := s.store.Set(ctx, chunkKey, chunk)
+			if err != nil {
+				return err
+			}
 
-		chunkKey = bytesPrefixEnd(chunkKey)
+			chunkKey = bytesPrefixEnd(chunkKey)
+		}
+	}
+
+	if s.keyLen == 0 {
+		// If this is the first write, set the length of keys
+		s.keyLen = len(key)
 	}
 
 	return nil
