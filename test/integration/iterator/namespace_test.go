@@ -5,10 +5,15 @@ import (
 
 	"github.com/sourcenetwork/corekv/test/action"
 	"github.com/sourcenetwork/corekv/test/integration"
+	"github.com/sourcenetwork/corekv/test/multiplier"
 )
 
 func TestIteratorNamespace_DoesNotReturnSelf_NamespaceMatch(t *testing.T) {
 	test := &integration.Test{
+		Excludes: []multiplier.Name{
+			// The chunk store will break if namespaced after writing values to it
+			multiplier.Chunk,
+		},
 		Actions: []action.Action{
 			action.Set([]byte("namespace"), []byte("namespace exact match")),
 			action.Namespace([]byte("namespace")),
@@ -27,6 +32,10 @@ func TestIteratorNamespace_DoesNotReturnSelf_NamespaceMatch(t *testing.T) {
 
 func TestIteratorNamespace_ExcludesItemsOutsideOfNamespace(t *testing.T) {
 	test := &integration.Test{
+		Excludes: []multiplier.Name{
+			// The chunk store will break if namespaced after writing values to it
+			multiplier.Chunk,
+		},
 		Actions: []action.Action{
 			action.Set([]byte("k1"), []byte("v1")),
 			action.Set([]byte("k4"), []byte("v4")),
