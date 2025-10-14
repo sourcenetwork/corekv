@@ -155,6 +155,10 @@ func (s *Chunkstore) Set(ctx context.Context, key []byte, value []byte) error {
 				return err
 			}
 
+			// TODO - this is incorrect beyond 256 chunks! It has been commited as-is as we need this store
+			// asap and this limit is unlikely to impact the immediate use-case.
+			//
+			// https://github.com/sourcenetwork/corekv/issues/93
 			chunkKey = bytesPrefixEnd(chunkKey)
 		}
 	}
