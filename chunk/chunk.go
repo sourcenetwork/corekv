@@ -51,7 +51,7 @@ func New(
 	var keyLen int
 	if hasKey {
 		key := it.Key()
-		// Assume the key is a `0` chunkstore key, and trim the 0-index from
+		// Assume the key is for the first chunk in an external key, and trim the 0-index from
 		// the length.
 		keyLen = len(key) - 1
 	}
