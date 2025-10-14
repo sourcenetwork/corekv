@@ -83,7 +83,9 @@ func NewSized(
 }
 
 func (s *Chunkstore) Get(ctx context.Context, key []byte) ([]byte, error) {
-	it, err := s.store.Iterator(ctx, iterOptions(key, false))
+	it, err := s.store.Iterator(ctx, corekv.IterOptions{
+		Prefix: key,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +120,10 @@ func (s *Chunkstore) Get(ctx context.Context, key []byte) ([]byte, error) {
 }
 
 func (s *Chunkstore) Has(ctx context.Context, key []byte) (bool, error) {
-	it, err := s.store.Iterator(ctx, iterOptions(key, true))
+	it, err := s.store.Iterator(ctx, corekv.IterOptions{
+		Prefix:   key,
+		KeysOnly: true,
+	})
 	if err != nil {
 		return false, err
 	}
@@ -159,7 +164,10 @@ func (s *Chunkstore) Set(ctx context.Context, key []byte, value []byte) error {
 }
 
 func (s *Chunkstore) Delete(ctx context.Context, key []byte) error {
-	it, err := s.store.Iterator(ctx, iterOptions(key, true))
+	it, err := s.store.Iterator(ctx, corekv.IterOptions{
+		Prefix:   key,
+		KeysOnly: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -319,13 +327,6 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 
 func (it *iterator) Close() error {
 	return it.it.Close()
-}
-
-func iterOptions(key []byte, keysOnly bool) corekv.IterOptions {
-	return corekv.IterOptions{
-		Prefix:   key,
-		KeysOnly: keysOnly,
-	}
 }
 
 func bytesPrefixEnd(b []byte) []byte {
