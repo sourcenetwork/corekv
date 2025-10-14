@@ -243,12 +243,6 @@ func (it *iterator) Reset() {
 	it.it.Reset()
 }
 
-// todo - redo, collisions possible with variable key length.  Must have fixed key size.
-// can set/cache key size on first Set, and on Create (check if store is not empty)
-//
-// different namespaces can have different key sizes this way, but must be namespaced, then chunked.
-//
-// document!
 func (it *iterator) Next() (bool, error) {
 	var chunks [][]byte
 	for {
