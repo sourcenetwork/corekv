@@ -142,7 +142,8 @@ func (s *Chunkstore) Set(ctx context.Context, key []byte, value []byte) error {
 	chunkKey := append(key, byte(0))
 
 	if len(value) == 0 {
-		// If an empty value has been provided
+		// If an empty value has been provided we don't need to chunk, but we do want the
+		// chunkKey suffix (for now) in order to simplify other functions.
 		err := s.store.Set(ctx, chunkKey, value)
 		if err != nil {
 			return err
