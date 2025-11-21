@@ -147,6 +147,8 @@ func (txn *lTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (cor
 	return &iterator{
 		d:        txn.d,
 		i:        txn.t.NewIterator(slice, nil),
+		start:    slice.Start,
+		end:      slice.Limit,
 		reverse:  iterOpts.Reverse,
 		keysOnly: iterOpts.KeysOnly,
 		reset:    true,

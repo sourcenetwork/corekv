@@ -75,7 +75,7 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 		return it.i.First(), nil
 	}
 	it.i.Seek(key)
-	if it.reverse || !it.i.Valid() {
+	if !it.i.Valid() {
 		return it.Next()
 	}
 	return true, nil
