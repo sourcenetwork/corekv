@@ -144,16 +144,11 @@ func (txn *lTxn) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (cor
 	} else {
 		slice = &util.Range{Start: iterOpts.Start, Limit: iterOpts.End}
 	}
-	closer := func() error {
-		txn.Discard()
-		return nil
-	}
 	return &iterator{
 		d:        txn.d,
 		i:        txn.t.NewIterator(slice, nil),
 		reverse:  iterOpts.Reverse,
 		keysOnly: iterOpts.KeysOnly,
-		closer:   closer,
 		reset:    true,
 	}, nil
 }

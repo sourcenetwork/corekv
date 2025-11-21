@@ -26,7 +26,8 @@ func (n *chunk) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastStoreWrappingIndex = i
 		}
 	}

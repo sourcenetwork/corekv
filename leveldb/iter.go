@@ -16,8 +16,7 @@ type iterator struct {
 	keysOnly bool
 	// reset is a mutatuble property that indicates whether the iterator should be
 	// returned to the beginning on the next [Next] call.
-	reset  bool
-	closer func() error
+	reset bool
 }
 
 func (it *iterator) Reset() {
@@ -57,10 +56,11 @@ func (it *iterator) Value() ([]byte, error) {
 	if it.keysOnly {
 		return nil, nil
 	}
-	if len(it.i.Value()) == 0 {
+	value := it.i.Value()
+	if len(value) == 0 {
 		return nil, nil
 	}
-	return bytes.Clone(it.i.Value()), nil
+	return bytes.Clone(value), nil
 }
 
 func (it *iterator) Seek(key []byte) (bool, error) {
@@ -68,26 +68,14 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 	if it.d.closed.Load() {
 		return false, corekv.ErrDBClosed
 	}
-	var target []byte
-	if it.reverse {
-		if it.end != nil && bytes.Compare(it.end, key) < 0 {
-			// We should not yield keys greater/equal to the `end`, so if the given seek-key
-			// is greater than `end`, we should instead seek to `end`.
-			target = it.end
-		} else {
-			target = key
-		}
-	} else {
-		if it.start != nil && bytes.Compare(key, it.start) >= 0 {
-			// We should not yield keys smaller than `start`, so if the given seek-key
-			// is smaller than `start`, we should instead seek to `start`.
-			target = it.start
-		} else {
-			target = key
-		}
+	if it.reverse && it.end != nil && bytes.Compare(it.end, key) < 0 {
+		return it.i.Last(), nil
 	}
-	it.i.Seek(target)
-	if !it.i.Valid() {
+	if !it.reverse && it.start != nil && bytes.Compare(key, it.start) < 0 {
+		return it.i.First(), nil
+	}
+	it.i.Seek(key)
+	if it.reverse || !it.i.Valid() {
 		return it.Next()
 	}
 	return true, nil
@@ -95,8 +83,5 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 
 func (it *iterator) Close() error {
 	it.i.Release()
-	if it.closer != nil {
-		return it.closer()
-	}
 	return nil
 }

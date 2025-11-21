@@ -43,7 +43,8 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -83,7 +84,8 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 			}
 			continue
 
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			newActions = append(newActions, a)
 			continue
 
@@ -172,7 +174,8 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -200,7 +203,8 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			result[newIndex] = a
 
 			if i == lastCreateStoreIndex {
@@ -268,7 +272,8 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -296,7 +301,8 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			result[newIndex] = a
 
 			if i == lastCreateStoreIndex {
