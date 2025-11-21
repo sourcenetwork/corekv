@@ -22,6 +22,11 @@ jobs:
         namespace: [namespace, none]
         chunk: [chunk, none]
         txn: [txn-commit, txn-discard, txn-multi, none]
+        exclude:
+          # level requires an additional OPFS wrapper to
+          # work in the browser
+          - store: level
+            target: wasm
 
     runs-on: ubuntu-latest
 

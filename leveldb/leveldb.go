@@ -107,6 +107,9 @@ func (txn *lTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
 	if txn.err != nil {
 		return nil, levelErrToKVErr(txn.err)
 	}
+	if txn.d.closed.Load() {
+		return nil, corekv.ErrDBClosed
+	}
 	value, err := txn.t.Get(key, nil)
 	if err != nil {
 		return nil, levelErrToKVErr(err)
@@ -117,6 +120,9 @@ func (txn *lTxn) Get(ctx context.Context, key []byte) ([]byte, error) {
 func (txn *lTxn) Has(ctx context.Context, key []byte) (bool, error) {
 	if txn.err != nil {
 		return false, levelErrToKVErr(txn.err)
+	}
+	if txn.d.closed.Load() {
+		return false, corekv.ErrDBClosed
 	}
 	exists, err := txn.t.Has(key, nil)
 	if err != nil {
@@ -156,6 +162,9 @@ func (txn *lTxn) Set(ctx context.Context, key []byte, value []byte) error {
 	if txn.err != nil {
 		return levelErrToKVErr(txn.err)
 	}
+	if txn.d.closed.Load() {
+		return corekv.ErrDBClosed
+	}
 	err := txn.t.Put(key, value, nil)
 	return levelErrToKVErr(err)
 }
@@ -164,6 +173,9 @@ func (txn *lTxn) Delete(ctx context.Context, key []byte) error {
 	if txn.err != nil {
 		return levelErrToKVErr(txn.err)
 	}
+	if txn.d.closed.Load() {
+		return corekv.ErrDBClosed
+	}
 	err := txn.t.Delete(key, nil)
 	return levelErrToKVErr(err)
 }
@@ -171,6 +183,9 @@ func (txn *lTxn) Delete(ctx context.Context, key []byte) error {
 func (txn *lTxn) Commit() error {
 	if txn.err != nil {
 		return levelErrToKVErr(txn.err)
+	}
+	if txn.d.closed.Load() {
+		return corekv.ErrDBClosed
 	}
 	err := txn.t.Commit()
 	return levelErrToKVErr(err)
