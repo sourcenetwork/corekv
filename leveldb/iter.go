@@ -74,11 +74,15 @@ func (it *iterator) Seek(key []byte) (bool, error) {
 	if !it.reverse && it.start != nil && bytes.Compare(key, it.start) < 0 {
 		return it.i.First(), nil
 	}
-	it.i.Seek(key)
-	if !it.i.Valid() {
-		return it.Next()
+	if !it.i.Seek(key) {
+		return false, nil
 	}
-	return true, nil
+	// seek finds a key with a greater than or equal value
+	// when reversed we want a less than or equal value
+	if it.reverse && bytes.Compare(it.i.Key(), key) > 0 {
+		return it.i.Prev(), nil
+	}
+	return it.i.Valid(), nil
 }
 
 func (it *iterator) Close() error {

@@ -79,6 +79,8 @@ func (l *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (
 	return &iterator{
 		d:        l,
 		i:        l.db.NewIterator(slice, nil),
+		start:    slice.Start,
+		end:      slice.Limit,
 		reverse:  iterOpts.Reverse,
 		keysOnly: iterOpts.KeysOnly,
 		reset:    true,
