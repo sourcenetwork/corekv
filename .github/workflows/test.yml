@@ -27,6 +27,10 @@ jobs:
           # work in the browser
           - store: level
             target: wasm
+          # level only supports one transaction at a time
+          # so this multiplier will always timeout
+          - store: level
+            txn: txn-multi
 
     runs-on: ubuntu-latest
 
