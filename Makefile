@@ -9,76 +9,123 @@ clean:
 .PHONY: test
 test:
 	@$(MAKE) clean
-	go test ./test/...
+# Workspace submodule tests must be run from their root directory
+	(cd ./test && go test ./...)
 
-.PHONY: test\:all
-test\:all:
+.PHONY: test\:memory
+test\:memory:
 # Environment variable changes do not invalidate the go test cache, so it is important
 # for us to clean between each run.
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory" go test ./test/...
+	(cd ./memory && go test ./...)
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,memory" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,memory" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,badger" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,memory,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,badger,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,memory,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,badger,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,txn-multi" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,memory,txn-multi" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,badger,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="chunk,memory" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,memory" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,memory,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,chunk,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,memory,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,chunk,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,memory,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="memory,chunk,txn-multi" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="chunk,memory" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-multi" sh -c 'cd ./test && go test ./...'
+
+.PHONY: test\:badger
+test\:badger:
+# Environment variable changes do not invalidate the go test cache, so it is important
+# for us to clean between each run.
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="chunk,badger" go test ./test/...
+	(cd ./badger && go test ./...)
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,memory" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,badger" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,badger" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,chunk,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,badger,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,chunk,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,badger,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="badger,chunk,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger,txn-multi" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,badger,txn-multi" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,chunk,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="chunk,badger" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-commit" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,badger" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,chunk,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger,chunk,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-discard" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="memory,chunk,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="badger,chunk,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
-	CORE_KV_MULTIPLIERS="namespace,chunk,memory,txn-multi" go test ./test/...
+	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="badger,chunk,txn-multi" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,badger,txn-multi" sh -c 'cd ./test && go test ./...'
+
+.PHONY: test\:level
+test\:level:
+# Environment variable changes do not invalidate the go test cache, so it is important
+# for us to clean between each run.
+	@$(MAKE) clean
+	(cd ./leveldb && go test ./...)
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,level" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,txn-commit" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,level,txn-commit"  sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,level,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="chunk,level" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,level" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,chunk,txn-commit" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,level,txn-commit" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,chunk,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,level,txn-discard" sh -c 'cd ./test && go test ./...'
+
+.PHONY: test\:all
+test\:all:
+	@$(MAKE) test:memory
+	@$(MAKE) test:badger
+	@$(MAKE) test:level
 
 .PHONY: test\:ci
 test\:ci:
@@ -101,5 +148,6 @@ tidy:
 	(cd ./badger && go mod tidy)
 	(cd ./blockstore && go mod tidy)
 	(cd ./chunk && go mod tidy)
+	(cd ./level && go mod tidy)
 	(cd ./test && go mod tidy)
 	go mod tidy

@@ -7,6 +7,7 @@ import (
 func init() {
 	Register(&badger{})
 	Register(&memory{})
+	Register(&level{})
 }
 
 const Badger Name = "badger"
@@ -59,6 +60,35 @@ func (n *memory) Apply(source action.Actions) action.Actions {
 		_, ok := sourceAction.(*action.NewStore)
 		if ok {
 			result[i] = &action.NewMemoryStore{}
+		} else {
+			result[i] = sourceAction
+		}
+	}
+
+	return result
+}
+
+const Level Name = "level"
+
+// level represents the leveldb store complexity multiplier.
+//
+// Applying the multiplier will replace all [action.NewStore] actions
+// with [action.NewLevelStore] instances.
+type level struct{}
+
+var _ Multiplier = (*level)(nil)
+
+func (n *level) Name() Name {
+	return Level
+}
+
+func (n *level) Apply(source action.Actions) action.Actions {
+	result := make([]action.Action, len(source))
+
+	for i, sourceAction := range source {
+		_, ok := sourceAction.(*action.NewStore)
+		if ok {
+			result[i] = &action.NewLevelStore{}
 		} else {
 			result[i] = sourceAction
 		}

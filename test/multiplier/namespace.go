@@ -26,7 +26,7 @@ func (n *namespace) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastStoreWrappingIndex = i
 		}
 	}

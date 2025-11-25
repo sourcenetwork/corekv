@@ -7,7 +7,7 @@ on:
 
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - "v[0-9]+.[0-9]+.[0-9]+"
     branches:
       - main
 
@@ -16,12 +16,21 @@ jobs:
     name: Run tests job
 
     strategy:
-        matrix:
-          target: [default, wasm]
-          store: [memory, badger]
-          namespace: [namespace, none]
-          chunk: [chunk, none]
-          txn: [txn-commit, txn-discard, txn-multi, none]
+      matrix:
+        target: [default, wasm]
+        store: [memory, badger, level]
+        namespace: [namespace, none]
+        chunk: [chunk, none]
+        txn: [txn-commit, txn-discard, txn-multi, none]
+        exclude:
+          # level requires an additional OPFS wrapper to
+          # work in the browser
+          - store: level
+            target: wasm
+          # level only supports one transaction at a time
+          # so this multiplier will always timeout
+          - store: level
+            txn: txn-multi
 
     runs-on: ubuntu-latest
 
@@ -58,8 +67,8 @@ jobs:
     name: Run tests job
 
     strategy:
-        matrix:
-          os: [ubuntu-latest, windows-latest, macos-latest]
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
