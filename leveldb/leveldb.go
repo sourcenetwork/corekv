@@ -1,3 +1,10 @@
+// This package implements a datastore backed by goleveldb. It has some important limitations to consider around transactions:
+//
+// Only one transaction can be opened at a time. Subsequent call to Write and OpenTransaction will be blocked until in-flight transaction is committed or discarded. The returned transaction handle is safe for concurrent use.
+//
+// Transaction is expensive and can overwhelm compaction, especially if transaction size is small. Use with caution.
+//
+// The transaction must be closed once done, either by committing or discarding the transaction. Closing the DB will discard open transaction.
 package leveldb
 
 import (

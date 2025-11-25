@@ -9,12 +9,15 @@ clean:
 .PHONY: test
 test:
 	@$(MAKE) clean
-	cd ./test && go test ./...
+# Workspace submodule tests must be run from their root directory
+	(cd ./test && go test ./...)
 
 .PHONY: test\:memory
 test\:memory:
 # Environment variable changes do not invalidate the go test cache, so it is important
 # for us to clean between each run.
+	@$(MAKE) clean
+	(cd ./memory && go test ./...)
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="memory" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
@@ -53,6 +56,8 @@ test\:badger:
 # Environment variable changes do not invalidate the go test cache, so it is important
 # for us to clean between each run.
 	@$(MAKE) clean
+	(cd ./badger && go test ./...)
+	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="badger" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,badger" sh -c 'cd ./test && go test ./...'
@@ -89,6 +94,8 @@ test\:badger:
 test\:level:
 # Environment variable changes do not invalidate the go test cache, so it is important
 # for us to clean between each run.
+	@$(MAKE) clean
+	(cd ./leveldb && go test ./...)
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="level" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean

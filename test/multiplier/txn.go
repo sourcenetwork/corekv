@@ -43,7 +43,6 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
@@ -84,7 +83,6 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 			}
 			continue
 
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			newActions = append(newActions, a)
 			continue
@@ -174,7 +172,6 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
@@ -203,7 +200,6 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			result[newIndex] = a
 
@@ -272,7 +268,6 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			lastCreateStoreIndex = i
 
@@ -301,7 +296,6 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		// TODO this comment is for reviewers, but this was hard to track down, can this be done better?
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			result[newIndex] = a
 
