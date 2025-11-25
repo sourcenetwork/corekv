@@ -148,6 +148,6 @@ tidy:
 	(cd ./badger && go mod tidy)
 	(cd ./blockstore && go mod tidy)
 	(cd ./chunk && go mod tidy)
-	(cd ./level && go mod tidy)
+	(cd ./leveldb && go mod tidy)
 	(cd ./test && go mod tidy)
 	go mod tidy
