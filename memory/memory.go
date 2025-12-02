@@ -105,6 +105,10 @@ func (d *Datastore) Close() error {
 
 // Delete implements corekv.Store
 func (d *Datastore) Delete(ctx context.Context, key []byte) error {
+	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	if ok {
+		return tx.Delete(ctx, key)
+	}
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
@@ -113,7 +117,7 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
 	}
-	tx := d.newTransaction(false)
+	tx = d.newTransaction(false)
 
 	err := tx.Delete(ctx, key)
 	cErr := tx.Commit()
@@ -135,6 +139,10 @@ func get(values *btree.BTreeG[dsItem], key []byte, version uint64) dsItem {
 
 // Get implements corekv.Store.
 func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err error) {
+	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	if ok {
+		return tx.Get(ctx, key)
+	}
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
@@ -153,6 +161,10 @@ func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err erro
 
 // Has implements corekv.Store.
 func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error) {
+	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	if ok {
+		return tx.Has(ctx, key)
+	}
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
@@ -196,6 +208,10 @@ func (d *Datastore) newTransaction(readOnly bool) *basicTxn {
 
 // Put implements corekv.Store.
 func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err error) {
+	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	if ok {
+		return tx.Set(ctx, key, value)
+	}
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
@@ -204,7 +220,7 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 	if len(key) == 0 {
 		return corekv.ErrEmptyKey
 	}
-	tx := d.newTransaction(false)
+	tx = d.newTransaction(false)
 
 	err = tx.Set(ctx, key, value)
 	if err != nil {
@@ -215,6 +231,10 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 }
 
 func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
+	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	if ok {
+		return tx.Iterator(ctx, opts)
+	}
 	d.closeLk.RLock()
 	defer d.closeLk.RUnlock()
 	if d.closed {
