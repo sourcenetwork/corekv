@@ -42,13 +42,24 @@ var CtxTxnKey = &ctxTxnKey{}
 
 // MustGetCtxTxn returns the transaction from the context or panics.
 func MustGetCtxTxn(ctx context.Context) Txn {
-	return ctx.Value(CtxTxnKey).(Txn) //nolint:forcetypeassert
+	return MustGetCtxTxnG[Txn](ctx)
+}
+
+// MustGetCtxTxn returns the transaction from the context or panics.
+func MustGetCtxTxnG[T Txn](ctx context.Context) T {
+	return ctx.Value(CtxTxnKey).(T) //nolint:forcetypeassert
 }
 
 // TryGetCtxTxn returns a transaction and a bool indicating if the
 // txn was retrieved from the given context.
 func TryGetCtxTxn(ctx context.Context) (Txn, bool) {
-	txn, ok := ctx.Value(CtxTxnKey).(Txn)
+	return TryGetCtxTxnG[Txn](ctx)
+}
+
+// TryGetCtxTxnG returns a transaction and a bool indicating if the
+// txn was retrieved from the given context.
+func TryGetCtxTxnG[T Txn](ctx context.Context) (T, bool) {
+	txn, ok := ctx.Value(CtxTxnKey).(T)
 	return txn, ok
 }
 

@@ -105,7 +105,7 @@ func (d *Datastore) Close() error {
 
 // Delete implements corekv.Store
 func (d *Datastore) Delete(ctx context.Context, key []byte) error {
-	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	tx, ok := corekv.TryGetCtxTxnG[*basicTxn](ctx)
 	if ok {
 		return tx.Delete(ctx, key)
 	}
@@ -139,7 +139,7 @@ func get(values *btree.BTreeG[dsItem], key []byte, version uint64) dsItem {
 
 // Get implements corekv.Store.
 func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err error) {
-	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	tx, ok := corekv.TryGetCtxTxnG[*basicTxn](ctx)
 	if ok {
 		return tx.Get(ctx, key)
 	}
@@ -161,7 +161,7 @@ func (d *Datastore) Get(ctx context.Context, key []byte) (value []byte, err erro
 
 // Has implements corekv.Store.
 func (d *Datastore) Has(ctx context.Context, key []byte) (exists bool, err error) {
-	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	tx, ok := corekv.TryGetCtxTxnG[*basicTxn](ctx)
 	if ok {
 		return tx.Has(ctx, key)
 	}
@@ -208,7 +208,7 @@ func (d *Datastore) newTransaction(readOnly bool) *basicTxn {
 
 // Put implements corekv.Store.
 func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err error) {
-	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	tx, ok := corekv.TryGetCtxTxnG[*basicTxn](ctx)
 	if ok {
 		return tx.Set(ctx, key, value)
 	}
@@ -231,7 +231,7 @@ func (d *Datastore) Set(ctx context.Context, key []byte, value []byte) (err erro
 }
 
 func (d *Datastore) Iterator(ctx context.Context, opts corekv.IterOptions) (corekv.Iterator, error) {
-	tx, ok := ctx.Value(corekv.CtxTxnKey).(*basicTxn)
+	tx, ok := corekv.TryGetCtxTxnG[*basicTxn](ctx)
 	if ok {
 		return tx.Iterator(ctx, opts)
 	}
