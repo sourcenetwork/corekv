@@ -45,6 +45,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/sourcenetwork/goleveldb v0.0.0-20251121174029-6d4842212dd4 h1:rvcioM9WoKHBCgDfTOUjr2Zch7qIyXSKFne3Jn/PHD0=
 github.com/sourcenetwork/goleveldb v0.0.0-20251121174029-6d4842212dd4/go.mod h1:KSKTNOllWZdJKh2fC6yK7zGoG6RxRPzIYlRmrkPOSRM=
+github.com/sourcenetwork/goleveldb v0.0.0-20251125214452-ff8bbf57cc6b h1:/VmMdUiaDryB9YsSoIy5NjIVGkwgXtbUeo0c0DJosJE=
+github.com/sourcenetwork/goleveldb v0.0.0-20251125214452-ff8bbf57cc6b/go.mod h1:PCRDM9+nPBLx2jHaJtJ67Q3Lj4DYFEK/WEwCs36bbgo=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.7.2 h1:4jaiDzPyXQvSd7D0EjG45355tLlV3VOECpq10pLC+8s=
