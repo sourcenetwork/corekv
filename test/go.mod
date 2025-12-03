@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/dgraph-io/badger/v4 v4.8.0
-	github.com/sourcenetwork/corekv v0.2.4
+	github.com/sourcenetwork/corekv v0.0.0
 	github.com/sourcenetwork/corekv/badger v0.0.0
 	github.com/sourcenetwork/corekv/chunk v0.0.0
 	github.com/sourcenetwork/corekv/leveldb v0.0.0

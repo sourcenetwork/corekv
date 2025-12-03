@@ -43,21 +43,36 @@ func NewDatastoreFrom(db *badger.DB) *Datastore {
 }
 
 func (b *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
-	txn := b.newTxn(true)
+	txn, ok := corekv.TryGetCtxTxnG[*bTxn](ctx)
+	if ok {
+		return txn.Get(ctx, key)
+	}
+
+	txn = b.newTxn(true)
 	defer txn.Discard()
 
 	return txn.Get(ctx, key)
 }
 
 func (b *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
-	txn := b.newTxn(true)
+	txn, ok := corekv.TryGetCtxTxnG[*bTxn](ctx)
+	if ok {
+		return txn.Has(ctx, key)
+	}
+
+	txn = b.newTxn(true)
 	defer txn.Discard()
 
 	return txn.Has(ctx, key)
 }
 
 func (b *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
-	txn := b.newTxn(false)
+	txn, ok := corekv.TryGetCtxTxnG[*bTxn](ctx)
+	if ok {
+		return txn.Set(ctx, key, value)
+	}
+
+	txn = b.newTxn(false)
 	defer txn.Discard()
 
 	err := txn.Set(ctx, key, value)
@@ -69,7 +84,12 @@ func (b *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
 }
 
 func (b *Datastore) Delete(ctx context.Context, key []byte) error {
-	txn := b.newTxn(false)
+	txn, ok := corekv.TryGetCtxTxnG[*bTxn](ctx)
+	if ok {
+		return txn.Delete(ctx, key)
+	}
+
+	txn = b.newTxn(false)
 	defer txn.Discard()
 
 	err := txn.Delete(ctx, key)
@@ -89,7 +109,11 @@ func (b *Datastore) Close() error {
 }
 
 func (b *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
-	txn := b.newTxn(true)
+	txn, ok := corekv.TryGetCtxTxnG[*bTxn](ctx)
+	if ok {
+		return txn.iterator(iterOpts)
+	}
+	txn = b.newTxn(true)
 
 	it, err := txn.iterator(iterOpts)
 	if err != nil {

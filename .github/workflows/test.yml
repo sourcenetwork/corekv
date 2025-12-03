@@ -22,6 +22,7 @@ jobs:
         namespace: [namespace, none]
         chunk: [chunk, none]
         txn: [txn-commit, txn-discard, txn-multi, none]
+        context: [txn-context, none]
         exclude:
           # level requires an additional OPFS wrapper to
           # work in the browser
@@ -35,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.chunk }},${{ matrix.txn }}
+      CORE_KV_MULTIPLIERS: ${{ matrix.store }},${{ matrix.namespace }},${{ matrix.chunk }},${{ matrix.txn }},${{ matrix.context }}
 
     steps:
       - name: Checkout code into the directory

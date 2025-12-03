@@ -8,6 +8,7 @@ func init() {
 	Register(&txnCommit{})
 	Register(&txnDiscard{})
 	Register(&txnMulti{})
+	Register(&txnContext{})
 }
 
 const TxnCommit Name = "txn-commit"
@@ -73,15 +74,11 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 	for i, a := range source {
 		switch a.(type) {
 		case *action.NamespaceStore, *action.ChunkStore:
-			newActions = append(newActions, a)
-			newActions = append(newActions, action.WithTxn(a))
-			if i < firstCloseIndex {
-				newFirstCloseIndex += 1
-			}
+			// This can only happen if a NamespaceStore or ChunkStore are created
+			// before the last store create action. It is currently not handled.
 			if i < lastCreateStoreIndex {
-				newLastCreateStoreIndex += 1
+				panic("TODO")
 			}
-			continue
 
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			newActions = append(newActions, a)
@@ -325,6 +322,35 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 			} else {
 				result[newIndex] = a
 			}
+		}
+	}
+
+	return result
+}
+
+const TxnContext Name = "txn-context"
+
+// txnContext represents the txn-context complexity multiplier.
+//
+// Applying the multiplier will replace all [action.TxnAction] actions
+// with [action.TxnCtxAction] instances.
+type txnContext struct{}
+
+var _ Multiplier = (*txnContext)(nil)
+
+func (n *txnContext) Name() Name {
+	return TxnContext
+}
+
+func (n *txnContext) Apply(source action.Actions) action.Actions {
+	result := make([]action.Action, len(source))
+
+	for i, a := range source {
+		switch t := a.(type) {
+		case *action.TxnAction[action.Action]:
+			result[i] = action.WithTxnCtx(t.Action, t.TxnID)
+		default:
+			result[i] = a
 		}
 	}
 

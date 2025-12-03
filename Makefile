@@ -25,9 +25,13 @@ test\:memory:
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="memory,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="memory,txn-commit,txn-context" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,memory,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="memory,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="memory,txn-discard,txn-context" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,memory,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
@@ -64,9 +68,13 @@ test\:badger:
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="badger,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="badger,txn-commit,txn-context" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,badger,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="badger,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="badger,txn-discard,txn-context" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,badger,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
@@ -103,9 +111,13 @@ test\:level:
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="level,txn-commit" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,txn-commit,txn-context" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,level,txn-commit"  sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="level,txn-discard" sh -c 'cd ./test && go test ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="level,txn-discard,txn-context" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,level,txn-discard" sh -c 'cd ./test && go test ./...'
 	@$(MAKE) clean
