@@ -25,7 +25,7 @@ require (
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sourcenetwork/goleveldb v0.0.0-20251121174029-6d4842212dd4 // indirect
+	github.com/sourcenetwork/goleveldb v0.0.0-20251125214452-ff8bbf57cc6b // indirect
 	github.com/tidwall/btree v1.7.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.37.0 // indirect
