@@ -151,35 +151,3 @@ type Store interface {
 	// https://github.com/sourcenetwork/corekv/issues/39
 	Close() error
 }
-
-// TxnStore represents a [Store] that supports transactions.
-type TxnStore interface {
-	Store
-
-	// NewTxn returns a new transaction.
-	NewTxn(readonly bool) Txn
-}
-
-// TxnReaderWriter contains the functions for reading and writing values within the store
-// and supports transactions.
-type TxnReaderWriter interface {
-	ReaderWriter
-
-	// NewTxn returns a new transaction.
-	NewTxn(readonly bool) Txn
-}
-
-// Txn isolates changes made to the underlying store from this object,
-// and isolates changes made via this object from the underlying store
-// until `Commit` is called.
-type Txn interface {
-	ReaderWriter
-
-	// Commit applies all changes made via this [Txn] to the underlying
-	// [Store].
-	Commit() error
-
-	// Discard discards all changes made via this object so far, returning
-	// it to the state it was at at time of construction.
-	Discard()
-}

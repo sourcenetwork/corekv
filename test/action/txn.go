@@ -65,6 +65,42 @@ func (a *TxnAction[T]) Execute(s *state.State) {
 	}
 }
 
+// TxnCtxAction wraps an action within the context of a transaction.
+//
+// Executing this TxnCtxAction will execute the given action within the scope
+// of the given transaction by using the context transaction value.
+type TxnCtxAction[T Action] struct {
+	TxnID  int
+	Action T
+}
+
+var _ Action = (*TxnCtxAction[Action])(nil)
+
+// WithTxnCtx wraps the given action within the scope of the default (ID: 0) transaction.
+//
+// If a transaction with the given ID has not been created by the time this action
+// executes, executing the transaction will panic.
+func WithTxnCtx[T Action](action T, txnID int) *TxnCtxAction[T] {
+	return &TxnCtxAction[T]{
+		Action: action,
+		TxnID:  txnID,
+	}
+}
+
+func (a *TxnCtxAction[T]) Execute(s *state.State) {
+	originalCtx := s.Ctx
+	// Set the transaction value on the context, allowing the inner action
+	// to act on the transaction without needing to be aware of it.
+	s.Ctx = corekv.SetCtxTxn(s.Ctx, s.Txns[a.TxnID])
+	defer func() {
+		// Make sure the original context is restored after executing otherwise
+		// subsequent actions will erroneously act on the transaction.
+		s.Ctx = originalCtx
+	}()
+
+	a.Action.Execute(s)
+}
+
 // CreateNewTxn creates a new transaction when executed.
 //
 // It assumes that the active store supports this, and will panic during execution if

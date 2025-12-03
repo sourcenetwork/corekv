@@ -39,6 +39,10 @@ func NewDatastoreFrom(db *leveldb.DB) *Datastore {
 }
 
 func (l *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
+	txn, ok := corekv.TryGetCtxTxnG[*lTxn](ctx)
+	if ok {
+		return txn.Get(ctx, key)
+	}
 	value, err := l.db.Get(key, nil)
 	if err != nil {
 		return nil, levelErrToKVErr(err)
@@ -47,6 +51,10 @@ func (l *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
 }
 
 func (l *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
+	txn, ok := corekv.TryGetCtxTxnG[*lTxn](ctx)
+	if ok {
+		return txn.Has(ctx, key)
+	}
 	exists, err := l.db.Has(key, nil)
 	if err != nil {
 		return false, levelErrToKVErr(err)
@@ -55,12 +63,20 @@ func (l *Datastore) Has(ctx context.Context, key []byte) (bool, error) {
 }
 
 func (l *Datastore) Set(ctx context.Context, key []byte, value []byte) error {
+	txn, ok := corekv.TryGetCtxTxnG[*lTxn](ctx)
+	if ok {
+		return txn.Set(ctx, key, value)
+	}
 	err := l.db.Put(key, value, nil)
 	return levelErrToKVErr(err)
 
 }
 
 func (l *Datastore) Delete(ctx context.Context, key []byte) error {
+	txn, ok := corekv.TryGetCtxTxnG[*lTxn](ctx)
+	if ok {
+		return txn.Delete(ctx, key)
+	}
 	err := l.db.Delete(key, nil)
 	return levelErrToKVErr(err)
 }
@@ -74,6 +90,10 @@ func (l *Datastore) Close() error {
 }
 
 func (l *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {
+	txn, ok := corekv.TryGetCtxTxnG[*lTxn](ctx)
+	if ok {
+		return txn.Iterator(ctx, iterOpts)
+	}
 	if l.closed.Load() {
 		return nil, corekv.ErrDBClosed
 	}
