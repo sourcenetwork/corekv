@@ -73,6 +73,13 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch a.(type) {
+		case *action.NamespaceStore, *action.ChunkStore:
+			// This can only happen if a NamespaceStore or ChunkStore are created
+			// before the last store create action. It is currently not handled.
+			if i < lastCreateStoreIndex {
+				panic("TODO")
+			}
+
 		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
 			newActions = append(newActions, a)
 			continue
