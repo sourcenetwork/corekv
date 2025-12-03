@@ -218,7 +218,10 @@ func (txn *lTxn) Commit() error {
 }
 
 func (txn *lTxn) Discard() {
-	txn.t.Discard()
+	// transaction might be nil if db was closed prior to opening
+	if txn.t != nil {
+		txn.t.Discard()
+	}
 }
 
 var levelErrToKVErrMap = map[error]error{
