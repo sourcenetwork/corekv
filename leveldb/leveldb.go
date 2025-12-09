@@ -119,14 +119,25 @@ func (l *Datastore) NewTxn(_ bool) corekv.Txn {
 	// We store it for later and return it from all functions
 	// to satisfy the transaction interface.
 	t, err := l.db.OpenTransaction()
+	state, onSuccess, onError, onDiscard := corekv.NewTxnState()
 	return &lTxn{
-		t:   t,
-		d:   l,
-		err: err,
+		TxnState:  state,
+		onSuccess: onSuccess,
+		onError:   onError,
+		onDiscard: onDiscard,
+		t:         t,
+		d:         l,
+		err:       err,
 	}
 }
 
 type lTxn struct {
+	corekv.TxnState
+
+	onSuccess func()
+	onError   func()
+	onDiscard func()
+
 	t   *leveldb.Transaction
 	d   *Datastore
 	err error
@@ -207,13 +218,19 @@ func (txn *lTxn) Delete(ctx context.Context, key []byte) error {
 }
 
 func (txn *lTxn) Commit() error {
+	var err error
 	if txn.err != nil {
-		return levelErrToKVErr(txn.err)
+		err = txn.err
+	} else if txn.d.closed.Load() {
+		err = corekv.ErrDBClosed
+	} else {
+		err = txn.t.Commit()
 	}
-	if txn.d.closed.Load() {
-		return corekv.ErrDBClosed
+	if err != nil {
+		txn.onError()
+	} else {
+		txn.onSuccess()
 	}
-	err := txn.t.Commit()
 	return levelErrToKVErr(err)
 }
 
@@ -222,6 +239,7 @@ func (txn *lTxn) Discard() {
 	if txn.t != nil {
 		txn.t.Discard()
 	}
+	txn.onDiscard()
 }
 
 var levelErrToKVErrMap = map[error]error{

@@ -21,6 +21,12 @@ import (
 
 // basicTxn implements corekv.Txn
 type basicTxn struct {
+	corekv.TxnState
+
+	onSuccess func()
+	onError   func()
+	onDiscard func()
+
 	ops *btree.BTreeG[dsItem]
 	ds  *Datastore
 	// Version of the datastore when the transaction was initiated.
@@ -193,10 +199,14 @@ func (t *basicTxn) Iterator(ctx context.Context, opts corekv.IterOptions) (corek
 
 // Discard removes all the operations added to the transaction.
 func (t *basicTxn) Discard() {
+	t.discard()
+	t.onDiscard()
+}
+
+func (t *basicTxn) discard() {
 	if t.discarded {
 		return
 	}
-
 	t.ops.Clear()
 	t.clearInFlightTxn()
 	t.discarded = true
@@ -206,20 +216,23 @@ func (t *basicTxn) Discard() {
 func (t *basicTxn) Commit() error {
 	t.ds.closeLk.RLock()
 	defer t.ds.closeLk.RUnlock()
+
+	var err error
 	if t.ds.closed {
-		return corekv.ErrDBClosed
+		err = corekv.ErrDBClosed
+	} else if t.discarded {
+		err = corekv.ErrDiscardedTxn
+	} else if !t.readOnly {
+		err = t.ds.commit(t)
 	}
 
-	if t.discarded {
-		return corekv.ErrDiscardedTxn
+	t.discard()
+	if err != nil {
+		t.onError()
+	} else {
+		t.onSuccess()
 	}
-	defer t.Discard()
-
-	if !t.readOnly {
-		return t.ds.commit(t)
-	}
-
-	return nil
+	return err
 }
 
 func (t *basicTxn) checkForConflicts() error {

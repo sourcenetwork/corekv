@@ -140,13 +140,24 @@ func (b *Datastore) NewTxn(readonly bool) corekv.Txn {
 }
 
 func (b *Datastore) newTxn(readonly bool) *bTxn {
+	state, onSuccess, onError, onDiscard := corekv.NewTxnState()
 	return &bTxn{
-		t: b.db.NewTransaction(!readonly),
-		d: b,
+		TxnState:  state,
+		onSuccess: onSuccess,
+		onError:   onError,
+		onDiscard: onDiscard,
+		t:         b.db.NewTransaction(!readonly),
+		d:         b,
 	}
 }
 
 type bTxn struct {
+	corekv.TxnState
+
+	onSuccess func()
+	onError   func()
+	onDiscard func()
+
 	t *badger.Txn
 	d *Datastore
 }
@@ -200,12 +211,27 @@ func (txn *bTxn) Delete(ctx context.Context, key []byte) error {
 }
 
 func (txn *bTxn) Commit() error {
-	err := txn.t.Commit()
+	txn.d.closeLk.RLock()
+	defer txn.d.closeLk.RUnlock()
+
+	var err error
+	if txn.d.closed {
+		err = corekv.ErrDBClosed
+	} else {
+		err = txn.t.Commit()
+	}
+
+	if err != nil {
+		txn.onError()
+	} else {
+		txn.onSuccess()
+	}
 	return badgerErrToKVErr(err)
 }
 
 func (txn *bTxn) Discard() {
 	txn.t.Discard()
+	txn.onDiscard()
 }
 
 var badgerErrToKVErrMap = map[error]error{

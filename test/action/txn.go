@@ -169,6 +169,8 @@ func (a *DiscardTxn) Execute(s *state.State) {
 // CommitTxn commits the given transaction when executed.
 type CommitTxn struct {
 	ID int
+	// The expected error message.
+	ExpectError string
 }
 
 var _ Action = (*CommitTxn)(nil)
@@ -179,9 +181,103 @@ func Commit() *CommitTxn {
 	return &CommitTxn{}
 }
 
+// Commit returns a new [CommitTxn] that commits the default (ID: 0) transaction
+// when executed and expects the given error.
+func CommitE(expectError string) *CommitTxn {
+	return &CommitTxn{ExpectError: expectError}
+}
+
 func (a *CommitTxn) Execute(s *state.State) {
 	txn := s.Txns[a.ID]
 
 	err := txn.Commit()
-	require.NoError(s.T, err)
+	if a.ExpectError != "" {
+		expectError(s, err, a.ExpectError)
+	} else {
+		require.NoError(s.T, err)
+	}
+}
+
+// TxnOnSuccess registers a transaction OnSuccess callback.
+type TxnOnSuccess struct {
+	ID       int
+	callback func()
+}
+
+var _ Action = (*TxnOnSuccess)(nil)
+
+// OnSuccess returns a new [TxnOnSuccess] that registers a callback on the default (ID: 0) transaction
+// when executed.
+func OnSuccess(callback func()) *TxnOnSuccess {
+	return &TxnOnSuccess{callback: callback}
+}
+
+// OnSuccessI returns a new [TxnOnSuccess] that registers a callback on the given transaction
+// when executed.
+func OnSuccessI(id int, callback func()) *TxnOnSuccess {
+	return &TxnOnSuccess{
+		ID:       id,
+		callback: callback,
+	}
+}
+
+func (a *TxnOnSuccess) Execute(s *state.State) {
+	txn := s.Txns[a.ID]
+	txn.OnSuccess(a.callback)
+}
+
+// TxnOnError registers a transaction OnError callback.
+type TxnOnError struct {
+	ID       int
+	callback func()
+}
+
+var _ Action = (*TxnOnError)(nil)
+
+// OnError returns a new [TxnOnError] that registers a callback on the default (ID: 0) transaction
+// when executed.
+func OnError(callback func()) *TxnOnError {
+	return &TxnOnError{callback: callback}
+}
+
+// OnErrorI returns a new [TxnOnError] that registers a callback on the given transaction
+// when executed.
+func OnErrorI(id int, callback func()) *TxnOnError {
+	return &TxnOnError{
+		ID:       id,
+		callback: callback,
+	}
+}
+
+func (a *TxnOnError) Execute(s *state.State) {
+	txn := s.Txns[a.ID]
+	txn.OnError(a.callback)
+}
+
+// TxnOnDiscard registers a transaction OnError callback.
+type TxnOnDiscard struct {
+	ID       int
+	callback func()
+}
+
+var _ Action = (*TxnOnDiscard)(nil)
+
+// OnDiscard returns a new [TxnOnDiscard] that registers a callback on the default (ID: 0) transaction
+// when executed.
+func OnDiscard(callback func()) *TxnOnDiscard {
+	return &TxnOnDiscard{callback: callback}
+}
+
+// OnDiscardI returns a new [TxnOnDiscard] that registers a callback on the given transaction
+// when executed.
+func OnDiscardI(id int, callback func()) *TxnOnDiscard {
+	return &TxnOnDiscard{
+		ID:       id,
+		callback: callback,
+	}
+}
+
+func (a *TxnOnDiscard) Execute(s *state.State) {
+	txn := s.Txns[a.ID]
+	txn.OnDiscard(a.callback)
 }

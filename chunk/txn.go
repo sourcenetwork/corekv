@@ -9,7 +9,7 @@ import (
 type Txn struct {
 	*Chunkstore
 
-	txn corekv.Txn
+	corekv.TxnCore
 }
 
 var _ corekv.Txn = (*Txn)(nil)
@@ -25,16 +25,8 @@ func NewTxn(ctx context.Context, txn corekv.Txn, chunkSize int) (*Txn, error) {
 
 	return &Txn{
 		Chunkstore: chunkstore,
-		txn:        txn,
+		TxnCore:    txn,
 	}, nil
-}
-
-func (ntxn *Txn) Commit() error {
-	return ntxn.txn.Commit()
-}
-
-func (ntxn *Txn) Discard() {
-	ntxn.txn.Discard()
 }
 
 type TxnStore struct {
@@ -51,7 +43,7 @@ func (ntxn *TxnStore) NewTxn(readonly bool) corekv.Txn {
 
 	return &Txn{
 		Chunkstore: NewSized(txn, ntxn.chunkSize, ntxn.keyLen),
-		txn:        txn,
+		TxnCore:    txn,
 	}
 }
 

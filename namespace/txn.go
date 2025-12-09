@@ -6,8 +6,7 @@ import (
 
 type Txn struct {
 	Datastore
-
-	txn corekv.Txn
+	corekv.TxnCore
 }
 
 var _ corekv.Txn = (*Txn)(nil)
@@ -16,16 +15,8 @@ var _ corekv.Txn = (*Txn)(nil)
 func WrapTxn(txn corekv.Txn, prefix []byte) *Txn {
 	return &Txn{
 		Datastore: *Wrap(txn, prefix),
-		txn:       txn,
+		TxnCore:   txn,
 	}
-}
-
-func (ntxn *Txn) Commit() error {
-	return ntxn.txn.Commit()
-}
-
-func (ntxn *Txn) Discard() {
-	ntxn.txn.Discard()
 }
 
 type TxnStore struct {

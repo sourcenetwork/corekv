@@ -195,7 +195,12 @@ func (d *Datastore) NewTxn(readOnly bool) corekv.Txn {
 // to other concurrency issues.
 func (d *Datastore) newTransaction(readOnly bool) *basicTxn {
 	v := d.getVersion()
+	state, onSuccess, onError, onDiscard := corekv.NewTxnState()
 	txn := &basicTxn{
+		TxnState:  state,
+		onSuccess: onSuccess,
+		onError:   onError,
+		onDiscard: onDiscard,
 		ops:       btree.NewBTreeG(byKeys),
 		ds:        d,
 		readOnly:  readOnly,

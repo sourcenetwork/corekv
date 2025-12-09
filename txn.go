@@ -1,6 +1,9 @@
 package corekv
 
-import "context"
+import (
+	"context"
+	"sync/atomic"
+)
 
 // TxnStore represents a [Store] that supports transactions.
 type TxnStore interface {
@@ -24,6 +27,13 @@ type TxnReaderWriter interface {
 // until `Commit` is called.
 type Txn interface {
 	ReaderWriter
+	TxnCore
+}
+
+// TxnCore implements the core transaction methods. This is used by
+// stores that wrap other stores such as chunk and namespace.
+type TxnCore interface {
+	TxnState
 
 	// Commit applies all changes made via this [Txn] to the underlying
 	// [Store].
@@ -32,6 +42,94 @@ type Txn interface {
 	// Discard discards all changes made via this object so far, returning
 	// it to the state it was at at time of construction.
 	Discard()
+}
+
+// TxnState contains functions for managing transaction callbacks
+// and reading the unique transaction id.
+type TxnState interface {
+	// ID returns the unique immutable identifier for this transaction.
+	ID() uint64
+
+	// OnSuccess registers a function to be called when the transaction is committed.
+	OnSuccess(fn func())
+
+	// OnError registers a function to be called when the transaction is rolled back.
+	OnError(fn func())
+
+	// OnDiscard registers a function to be called when the transaction is discarded.
+	OnDiscard(fn func())
+
+	// OnSuccessAsync registers a function to be called asynchronously when the transaction is committed.
+	OnSuccessAsync(fn func())
+
+	// OnErrorAsync registers a function to be called asynchronously when the transaction is rolled back.
+	OnErrorAsync(fn func())
+
+	// OnDiscardAsync registers a function to be called asynchronously when the transaction is discarded.
+	OnDiscardAsync(fn func())
+}
+
+var txnCounter atomic.Uint64
+
+type txnEmbed struct {
+	id         uint64
+	errorFns   []func()
+	discardFns []func()
+	successFns []func()
+}
+
+// NewTxnState returns a struct that is meant to be embedded in
+// transaction implementations and functions to dispatch callbacks.
+//
+// This is meant to be used by store implementors and not corekv consumers.
+func NewTxnState() (TxnState, func(), func(), func()) {
+	state := &txnEmbed{
+		id: txnCounter.Add(1),
+	}
+	onSuccess := func() {
+		for _, fn := range state.successFns {
+			fn()
+		}
+	}
+	onError := func() {
+		for _, fn := range state.errorFns {
+			fn()
+		}
+	}
+	onDiscard := func() {
+		for _, fn := range state.discardFns {
+			fn()
+		}
+	}
+	return state, onSuccess, onError, onDiscard
+}
+
+func (t *txnEmbed) ID() uint64 {
+	return t.id
+}
+
+func (t *txnEmbed) OnSuccess(fn func()) {
+	t.successFns = append(t.successFns, fn)
+}
+
+func (t *txnEmbed) OnSuccessAsync(fn func()) {
+	t.successFns = append(t.successFns, func() { go fn() })
+}
+
+func (t *txnEmbed) OnError(fn func()) {
+	t.errorFns = append(t.errorFns, fn)
+}
+
+func (t *txnEmbed) OnErrorAsync(fn func()) {
+	t.errorFns = append(t.errorFns, func() { go fn() })
+}
+
+func (t *txnEmbed) OnDiscard(fn func()) {
+	t.discardFns = append(t.discardFns, fn)
+}
+
+func (t *txnEmbed) OnDiscardAsync(fn func()) {
+	t.discardFns = append(t.discardFns, func() { go fn() })
 }
 
 type ctxTxnKey struct{}
