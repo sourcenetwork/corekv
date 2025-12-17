@@ -39,8 +39,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rogpeppe/go-internal v1.13.1 h1:KvO1DLK/DRN07sQ1LQKScxyZJuNnedQ5/wKSR38lUII=
 github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWNMNyH2VO9fmH0o=
-github.com/sourcenetwork/goleveldb v0.0.0-20251125214452-ff8bbf57cc6b h1:/VmMdUiaDryB9YsSoIy5NjIVGkwgXtbUeo0c0DJosJE=
-github.com/sourcenetwork/goleveldb v0.0.0-20251125214452-ff8bbf57cc6b/go.mod h1:PCRDM9+nPBLx2jHaJtJ67Q3Lj4DYFEK/WEwCs36bbgo=
+github.com/sourcenetwork/goleveldb v0.0.0-20251217012629-27249d06b81b h1:DS+7xsNq0Q7AjBRMBr13CFn55eMPaGaJC8p5TMbcxmo=
+github.com/sourcenetwork/goleveldb v0.0.0-20251217012629-27249d06b81b/go.mod h1:PCRDM9+nPBLx2jHaJtJ67Q3Lj4DYFEK/WEwCs36bbgo=
 github.com/sourcenetwork/immutable v0.3.0 h1:gHPtGvLrTBTK5YpDAhMU+u+S8v1F6iYmc3nbZLryMdc=
 github.com/sourcenetwork/immutable v0.3.0/go.mod h1:GD7ceuh/HD7z6cdIwzKK2ctzgZ1qqYFJpsFp+8qYnbI=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
