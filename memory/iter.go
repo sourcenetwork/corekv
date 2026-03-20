@@ -167,7 +167,7 @@ func (iter *iterator) next() (bool, error) {
 	for iter.moveNext() {
 		// Scan through until we reach the next key.
 		// It doesn't matter if it is deleted or not.
-		if !bytes.Equal(previousItem.key, iter.it.Item().key) {
+		if !bytes.Equal(previousItem.key, iter.it.Item().key) && iter.it.Item().version <= iter.version {
 			hasItem = true
 			break
 		}
@@ -325,6 +325,10 @@ func (iter *iterator) loadLatestItem() {
 		// Scan through until we reach the next key.
 		// It doesn't matter if it is deleted or not.
 		if !bytes.Equal(previousItem.key, iter.it.Item().key) {
+			iter.it.Prev()
+			break
+		}
+		if iter.it.Item().version > iter.version {
 			iter.it.Prev()
 			break
 		}
