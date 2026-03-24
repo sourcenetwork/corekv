@@ -149,3 +149,28 @@ func TestIteratorForwardPrefixKeyOnlyAtNewerVersion(t *testing.T) {
 
 	require.Equal(t, []byte("testB"), iter.Key())
 }
+
+// TestIteratorReturnsLatestVisibleVersionForMultiVersionKey tests that when a key
+// has multiple versions, the iterator returns the value from the latest version
+// that is still <= the iterator's snapshot version.
+func TestIteratorReturnsLatestVisibleVersionForMultiVersionKey(t *testing.T) {
+	ctx := context.Background()
+	ds := newTestDatastore(ctx)
+
+	// Insert "aaa" at version 1 and version 5. With iter.version=3,
+	// only version 1 should be visible.
+	setItem(ds.values, []byte("aaa"), []byte("val_v1"), 1)
+	setItem(ds.values, []byte("aaa"), []byte("val_v5"), 5)
+
+	iter := newRangeIter(ds, ds.values, nil, nil, false, 3)
+	defer iter.Close()
+
+	hasItem, err := iter.Next()
+	require.NoError(t, err)
+	require.True(t, hasItem, "should find the key at its visible version")
+
+	require.Equal(t, []byte("aaa"), iter.Key())
+	val, err := iter.Value()
+	require.NoError(t, err)
+	require.Equal(t, []byte("val_v1"), val)
+}
