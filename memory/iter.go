@@ -131,6 +131,10 @@ func (iter *iterator) valid() bool {
 		return false
 	}
 
+	if iter.it.Item().version > iter.version {
+		return false
+	}
+
 	if iter.it.Item().isDeleted {
 		return false
 	}
