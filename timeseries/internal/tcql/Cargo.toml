@@ -1,0 +1,9 @@
+[package]
+name = "tcql"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cql_db = "0.2.4"
+cql_u64 = "0.2.3"
+chrono = "0.4.40"

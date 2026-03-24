@@ -1,0 +1,24 @@
+[package]
+name = "abi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = [
+    "staticlib",
+     "lib",        # For `generate-headers` and other downstream rust dependents
+]
+
+[[bin]]
+name = "generate-headers"
+required-features = ["headers"]  # Do not build unless generating headers.
+
+[dependencies]
+safer-ffi = "^0.1"
+tcql = { path="../tcql" }
+chrono = "0.4.40"
+
+[features]
+# If you want to generate the headers, use a feature-gate
+# to opt into doing so:
+headers = ["safer-ffi/headers"]
