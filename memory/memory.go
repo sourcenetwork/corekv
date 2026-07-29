@@ -36,7 +36,6 @@ type dsItem struct {
 	version   uint64
 	val       []byte
 	isDeleted bool
-	isGet     bool
 }
 
 func byKeys(a, b dsItem) bool {
@@ -197,6 +196,7 @@ func (d *Datastore) newTransaction(readOnly bool) *basicTxn {
 	v := d.getVersion()
 	txn := &basicTxn{
 		ops:       btree.NewBTreeG(byKeys),
+		reads:     btree.NewBTreeG(byKeys),
 		ds:        d,
 		readOnly:  readOnly,
 		dsVersion: &v,
@@ -332,9 +332,6 @@ func (d *Datastore) commit(t *basicTxn) error {
 	iter := t.ops.Iter()
 	v := t.ds.nextVersion()
 	for iter.Next() {
-		if iter.Item().isGet {
-			continue
-		}
 		item := iter.Item()
 		item.version = v
 		t.ds.values.Set(item)
