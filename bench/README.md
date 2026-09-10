@@ -41,8 +41,16 @@ BenchmarkScanAll/memory/v64
 BenchmarkFFINoop              # no lane/size; skips without -tags regolith
 ```
 
-Workloads: `SeqWrite RandWrite GetHit GetMiss Has ScanAll ScanReverse ScanPrefix TxnWrite
-TxnReadWrite BatchWrite ParallelMixed` — one top-level `Benchmark*` per row of the spec table.
+Workloads: `SeqWrite RandWrite GetHit GetMiss Has ScanAll ScanAllAppend ScanAllBorrow ScanReverse
+ScanPrefix TxnWrite TxnReadWrite BatchWrite ParallelMixed` — one top-level `Benchmark*` per row of
+the spec table, plus `ScanAllAppend` and `ScanAllBorrow`.
+
+`ScanAllAppend` and `ScanAllBorrow` are `ScanAll` reading each value through the optional
+`corekv.ValueAppender` / `corekv.ValueBorrower` interfaces, falling back to `Value` for
+iterators that do not implement them. They share `ScanAll`'s `opsPerIter`, so the three are
+directly comparable: `ScanAll` allocates a buffer and copies into it, `ScanAllAppend` copies into
+a re-used buffer, `ScanAllBorrow` does neither. They have no Rust counterpart — they measure a
+property of the Go interface, not of the engine — and so are outside the fidelity comparison.
 
 ## Reading the output
 
@@ -67,6 +75,7 @@ The `ns/op-key` divisor, which must stay equal to the Rust baseline's `Throughpu
 | GetMiss | 1000 | TxnWrite | 100 |
 | Has | 1000 | TxnReadWrite | 20 |
 | BatchWrite | 1000 | ParallelMixed | 4000 |
+| ScanAllAppend | 100000 | ScanAllBorrow | 100000 |
 
 ## Fidelity with the Rust baseline
 
@@ -106,8 +115,9 @@ Known, deliberate divergences:
 ## Invariants the harness enforces
 
 - Prefill and store construction happen before `b.ResetTimer()`, never inside the timed region.
-- Read-only workloads (`GetHit GetMiss Has ScanAll ScanReverse ScanPrefix`) share one prefilled
-  store per (lane, value size); a store is never shared between a read and a write workload.
+- Read-only workloads (`GetHit GetMiss Has ScanAll ScanAllAppend ScanAllBorrow ScanReverse
+  ScanPrefix`) share one prefilled store per (lane, value size); a store is never shared between a
+  read and a write workload.
 - Seed 42 for every random ordering, so all lanes touch keys in the same sequence.
 - Every error fails the benchmark. `GetMiss` asserts `corekv.ErrNotFound`; the scans assert the
   exact item count, so an empty iterator cannot masquerade as a fast one.

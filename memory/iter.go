@@ -43,7 +43,10 @@ type iterator struct {
 	firstItem dsItem
 }
 
-var _ corekv.Iterator = (*iterator)(nil)
+var (
+	_ corekv.Iterator      = (*iterator)(nil)
+	_ corekv.ValueBorrower = (*iterator)(nil)
+)
 
 func newPrefixIter(d *Datastore, values *btree.BTreeG[dsItem], prefix []byte, reverse bool, version uint64) *iterator {
 	it := values.Iter()
@@ -217,6 +220,19 @@ func (iter *iterator) Key() []byte {
 
 func (iter *iterator) Value() ([]byte, error) {
 	return iter.it.Item().val, nil
+}
+
+// BorrowValue implements [corekv.ValueBorrower].
+//
+// The memory store holds its values in Go memory already, so this hands the stored slice
+// straight to `fn`.  `Value` does the same thing, so there is nothing to be gained by
+// calling this instead - it is implemented so that callers written against the optional
+// interface do not have to carry a fallback path for this store.
+//
+// Note that, like `Value`, this ignores the `KeysOnly` option:
+// https://github.com/sourcenetwork/corekv/issues/33
+func (iter *iterator) BorrowValue(fn func(value []byte) error) error {
+	return fn(iter.it.Item().val)
 }
 
 func (iter *iterator) Seek(key []byte) (bool, error) {

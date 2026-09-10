@@ -13,6 +13,12 @@ type iteratorCloser interface {
 	withCloser(func() error)
 }
 
+var (
+	_ corekv.Iterator      = (*iterator)(nil)
+	_ corekv.ValueAppender = (*iterator)(nil)
+	_ corekv.ValueBorrower = (*iterator)(nil)
+)
+
 type iterator struct {
 	txn      *bTxn
 	i        *badger.Iterator
@@ -131,6 +137,42 @@ func (it *iterator) Value() ([]byte, error) {
 	}
 
 	return it.i.Item().ValueCopy(nil)
+}
+
+// AppendValue implements [corekv.ValueAppender], allowing the caller to provide the
+// buffer that the value is copied into.
+//
+// Note: badger's `Item.ValueCopy` is deliberately not used here, as it truncates the
+// given buffer (`append(dst[:0], value...)`) instead of appending to it.
+func (it *iterator) AppendValue(dst []byte) ([]byte, error) {
+	if it.keysOnly {
+		return dst, nil
+	}
+
+	// `Item.Value` yields badger's own buffer, which must not be retained beyond the
+	// current iteration - copying it into `dst` is exactly what is wanted here.
+	err := it.i.Item().Value(func(val []byte) error {
+		dst = append(dst, val...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return dst, nil
+}
+
+// BorrowValue implements [corekv.ValueBorrower], yielding badger's own value buffer to
+// the given function instead of copying it.
+//
+// If the iterator is keys-only, `fn` is called with nil, mirroring `Value` returning nil
+// rather than silently not calling `fn` at all.
+func (it *iterator) BorrowValue(fn func(value []byte) error) error {
+	if it.keysOnly {
+		return fn(nil)
+	}
+
+	return it.i.Item().Value(fn)
 }
 
 func (it *iterator) Seek(key []byte) (bool, error) {
