@@ -1,0 +1,22 @@
+[package]
+name = "regolith-baseline"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: deliberately NOT a member of any parent workspace.
+[workspace]
+
+[dependencies]
+regolith = "0.1.4"
+tempfile = "3"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "workloads"
+harness = false
+
+[profile.bench]
+opt-level = 3

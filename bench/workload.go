@@ -1,0 +1,517 @@
+// Package bench holds the shared, store-agnostic workload definitions used to compare
+// corekv store implementations (badger, memory, and - behind `-tags regolith` - regolith
+// over cgo) against each other, and against the native Rust baseline in `rust-baseline/`.
+//
+// The workloads are defined exactly once here and are driven purely through the
+// [corekv.Store] / [corekv.TxnStore] interfaces, so every lane executes the same
+// sequence of operations against the same keys.
+//
+// FIDELITY: this file mirrors rust-baseline/benches/workloads.rs. The PRNG, the shuffle,
+// the key formats, the per-iteration operation counts and the value bytes are all
+// reproduced bit-for-bit. Do not change one side without the other. The spec table lives
+// in ../PLAN-regolith.md.
+package bench
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"sync"
+	"testing"
+
+	"github.com/sourcenetwork/corekv"
+)
+
+const (
+	// Seed is the fixed PRNG seed used for every random ordering in every lane, so
+	// that all lanes touch keys in exactly the same sequence.
+	Seed = 42
+
+	// PrefillCount is the number of keys in the read-only fixture (PREFILL_N).
+	PrefillCount = 100_000
+
+	// writeN is the number of `Set`s in one SeqWrite/RandWrite iteration (WRITE_N).
+	writeN = 10_000
+
+	// pointOps is the number of point operations in one GetHit/GetMiss/Has iteration
+	// (POINT_OPS).
+	pointOps = 1_000
+
+	// missOffset is added to the shuffled index to produce a key the prefill never
+	// wrote. Matches the Rust lane's `key(1_000_000 + miss.next())`.
+	missOffset = 1_000_000
+
+	// txnWriteN is the number of `Set`s in one TxnWrite transaction (TXN_WRITE_N).
+	txnWriteN = 100
+
+	// txnRWN is the number of `Get`s, and separately of `Set`s, in one TxnReadWrite
+	// transaction (TXN_RW_N). The workload therefore performs 2*txnRWN operations.
+	txnRWN = 10
+
+	// batchWriteN is the number of `Set`s in one BatchWrite transaction
+	// (BATCH_WRITE_N). It is also the prefill size of the transactional fixture, so
+	// that TxnReadWrite's reads are hits.
+	//
+	// Note: "BatchWrite" is deliberately a 1000-key transaction rather than a native
+	// batch primitive - corekv's TxnStore exposes no batch API, so a native
+	// WriteBatch number would have no Go counterpart.
+	batchWriteN = 1_000
+
+	// parallelThreads / parallelOpsPerThread: ParallelMixed is exactly 4 goroutines of
+	// 1000 operations each per iteration (PARALLEL_THREADS / PARALLEL_OPS_PER_THREAD).
+	parallelThreads      = 4
+	parallelOpsPerThread = 1_000
+
+	// scanPrefixN is the number of keys matched by scanPrefix (SCAN_PREFIX_N).
+	scanPrefixN = 1_000
+)
+
+// scanPrefix matches keys key:000000099000 .. key:000000099999 - exactly 1000 of the
+// 100k prefilled keys (SCAN_PREFIX).
+var scanPrefix = []byte("key:000000099")
+
+// sink keeps values read by the scan and read workloads from being optimised away.
+// It is the analogue of the Rust lane's black_box.
+var sink int
+
+// rng is xorshift64* (Marsaglia/Vigna). It reproduces rust-baseline's Rng exactly: the
+// state is a single u64 initialised to the seed, and the final multiply is an output
+// scramble that does NOT feed back into the state.
+type rng struct{ x uint64 }
+
+func newRng(seed uint64) *rng { return &rng{x: seed} }
+
+func (r *rng) next() uint64 {
+	r.x ^= r.x >> 12
+	r.x ^= r.x << 25
+	r.x ^= r.x >> 27
+	return r.x * 0x2545F4914F6CDD1D
+}
+
+// shuffled returns [0, n) permuted by a descending Fisher-Yates driven by newRng(Seed).
+//
+// The index is `next() % (i + 1)` - plain modulo, not rejection sampling. The modulo
+// bias is identical on both sides of the comparison and therefore cancels; do not
+// "fix" it, or the two lanes stop touching keys in the same order.
+func shuffled(n uint64) []uint64 {
+	v := make([]uint64, n)
+	for i := range v {
+		v[i] = uint64(i)
+	}
+
+	r := newRng(Seed)
+	for i := n - 1; i > 0; i-- {
+		j := r.next() % (i + 1)
+		v[i], v[j] = v[j], v[i]
+	}
+	return v
+}
+
+// key returns the benchmark key for index i: `key:` followed by i zero-padded to 12
+// digits, 16 bytes total. Identical to the Rust lane's `format!("key:{i:012}")`.
+//
+// A fresh slice is allocated per call because stores are allowed to retain the key
+// (badger's transaction write-set does exactly that), so a shared scratch buffer would
+// be unsound. The allocation is identical in every lane.
+func key(i uint64) []byte {
+	b := make([]byte, 16)
+	copy(b, "key:")
+	for p := 15; p >= 4; p-- {
+		b[p] = byte('0' + i%10)
+		i /= 10
+	}
+	return b
+}
+
+// value returns the benchmark value of n bytes: 0xAB repeated, matching the Rust lane's
+// `vec![0xAB; vsize]`.
+func value(n int) []byte {
+	return bytes.Repeat([]byte{0xAB}, n)
+}
+
+var (
+	// order is the shuffled permutation of [0, PrefillCount) shared by the read
+	// workloads. All of the Rust lane's cursors use the same seed, so one slice with
+	// independent cursors is equivalent to its three Cursor values.
+	order []uint64
+
+	// writeKeys are the 10k keys of SeqWrite, in ascending order.
+	writeKeys [][]byte
+
+	// randWriteKeys are the same 10k keys in shuffled order (RandWrite).
+	randWriteKeys [][]byte
+
+	// presentKeys[i] == key(i) for the prefill range, precomputed so the read
+	// workloads measure the store rather than key formatting.
+	presentKeys [][]byte
+
+	// missKeys[i] == key(missOffset + i); guaranteed absent from a prefilled store.
+	missKeys [][]byte
+)
+
+func init() {
+	order = shuffled(PrefillCount)
+
+	writeKeys = make([][]byte, writeN)
+	for i := range writeKeys {
+		writeKeys[i] = key(uint64(i))
+	}
+
+	writeOrder := shuffled(writeN)
+	randWriteKeys = make([][]byte, writeN)
+	for i, o := range writeOrder {
+		randWriteKeys[i] = key(o)
+	}
+
+	presentKeys = make([][]byte, PrefillCount)
+	missKeys = make([][]byte, PrefillCount)
+	for i := range presentKeys {
+		presentKeys[i] = key(uint64(i))
+		missKeys[i] = key(missOffset + uint64(i))
+	}
+}
+
+// factory constructs a store for one benchmark lane.
+//
+// `new` must return a ready-to-use store and register its own teardown (Close, and
+// removal of any on-disk data) via tb.Cleanup.
+type factory struct {
+	name string
+	new  func(tb testing.TB) corekv.TxnStore
+}
+
+// factories is the set of lanes the suite runs. The regolith lane appends itself from
+// stores_regolith.go, which is behind `-tags regolith`.
+var factories []factory
+
+// regolithNoop, when non-nil, calls the regolith FFI no-op entry point. It is set by
+// stores_regolith.go; BenchmarkFFINoop skips when it is nil.
+var regolithNoop func()
+
+// workload is one row of the spec table.
+type workload struct {
+	name string
+
+	// prefillN is the number of keys written to the store before `run` starts; 0 for
+	// none. Prefill always happens outside the timed region.
+	prefillN int
+
+	// readOnly marks a workload that never mutates the store, allowing one prefilled
+	// store to be shared by all read-only workloads of the same (lane, value size).
+	// It must never be set on a workload that writes.
+	readOnly bool
+
+	// opsPerIter is the number of store operations (keys touched) performed by a
+	// single b.N iteration of `run`, matching the Rust lane's Throughput::Elements.
+	// It is the divisor used to report "ns/op-key", the number the lanes are
+	// compared on.
+	opsPerIter int
+
+	// movesValues indicates each counted op transfers a whole value, enabling a
+	// meaningful b.SetBytes throughput figure.
+	movesValues bool
+
+	// run performs the whole b.N loop. Timer management and metric reporting are the
+	// caller's job; `run` must only do the work.
+	run func(b *testing.B, s corekv.TxnStore, val []byte)
+}
+
+// workloads are the 12 workloads of the spec table, in spec order.
+var workloads = []workload{
+	{
+		// Successive iterations rewrite the same 10k keys, exactly as the Rust lane
+		// does, so the engine sees overwrites after the first iteration.
+		name: "SeqWrite", opsPerIter: writeN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				for _, k := range writeKeys {
+					if err := s.Set(ctx, k, val); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		},
+	},
+	{
+		name: "RandWrite", opsPerIter: writeN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				for _, k := range randWriteKeys {
+					if err := s.Set(ctx, k, val); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		},
+	},
+	{
+		// The cursor into the permutation wraps and persists across iterations, so
+		// the whole 100k key set is eventually touched rather than the first 1000
+		// entries over and over.
+		name: "GetHit", prefillN: PrefillCount, readOnly: true, opsPerIter: pointOps, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			at := 0
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < pointOps; j++ {
+					v, err := s.Get(ctx, presentKeys[order[at]])
+					if err != nil {
+						b.Fatal(err)
+					}
+					if len(v) != len(val) {
+						b.Fatalf("unexpected value length: got %d, want %d", len(v), len(val))
+					}
+					sink += len(v)
+					at = (at + 1) % len(order)
+				}
+			}
+		},
+	},
+	{
+		// The most sensitive probe of raw call overhead: a bloom-filter
+		// short-circuit, no value copied.
+		name: "GetMiss", prefillN: PrefillCount, readOnly: true, opsPerIter: pointOps,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			ctx := context.Background()
+			at := 0
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < pointOps; j++ {
+					_, err := s.Get(ctx, missKeys[order[at]])
+					if !errors.Is(err, corekv.ErrNotFound) {
+						b.Fatalf("expected ErrNotFound, got %v", err)
+					}
+					at = (at + 1) % len(order)
+				}
+			}
+		},
+	},
+	{
+		name: "Has", prefillN: PrefillCount, readOnly: true, opsPerIter: pointOps,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			ctx := context.Background()
+			at := 0
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < pointOps; j++ {
+					ok, err := s.Has(ctx, presentKeys[order[at]])
+					if err != nil {
+						b.Fatal(err)
+					}
+					if !ok {
+						b.Fatal("Has missed a prefilled key")
+					}
+					at = (at + 1) % len(order)
+				}
+			}
+		},
+	},
+	{
+		name: "ScanAll", prefillN: PrefillCount, readOnly: true, opsPerIter: PrefillCount, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			for i := 0; i < b.N; i++ {
+				scan(b, s, corekv.DefaultIterOptions, PrefillCount)
+			}
+		},
+	},
+	{
+		name: "ScanReverse", prefillN: PrefillCount, readOnly: true, opsPerIter: PrefillCount, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			for i := 0; i < b.N; i++ {
+				scan(b, s, corekv.IterOptions{Reverse: true}, PrefillCount)
+			}
+		},
+	},
+	{
+		name: "ScanPrefix", prefillN: PrefillCount, readOnly: true, opsPerIter: scanPrefixN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			for i := 0; i < b.N; i++ {
+				scan(b, s, corekv.IterOptions{Prefix: scanPrefix}, scanPrefixN)
+			}
+		},
+	},
+	{
+		// Transactions run one at a time, so no commit can conflict; a conflict here
+		// would be a bug and is fatal.
+		name: "TxnWrite", prefillN: batchWriteN, opsPerIter: txnWriteN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				txn := s.NewTxn(false)
+				for j := uint64(0); j < txnWriteN; j++ {
+					if err := txn.Set(ctx, key(j), val); err != nil {
+						txn.Discard()
+						b.Fatal(err)
+					}
+				}
+				if err := txn.Commit(); err != nil {
+					txn.Discard()
+					b.Fatal(err)
+				}
+			}
+		},
+	},
+	{
+		name: "TxnReadWrite", prefillN: batchWriteN, opsPerIter: 2 * txnRWN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				txn := s.NewTxn(false)
+				for j := uint64(0); j < txnRWN; j++ {
+					v, err := txn.Get(ctx, key(j))
+					if err != nil {
+						txn.Discard()
+						b.Fatal(err)
+					}
+					sink += len(v)
+				}
+				for j := uint64(0); j < txnRWN; j++ {
+					if err := txn.Set(ctx, key(j), val); err != nil {
+						txn.Discard()
+						b.Fatal(err)
+					}
+				}
+				if err := txn.Commit(); err != nil {
+					txn.Discard()
+					b.Fatal(err)
+				}
+			}
+		},
+	},
+	{
+		name: "BatchWrite", prefillN: batchWriteN, opsPerIter: batchWriteN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				txn := s.NewTxn(false)
+				for j := uint64(0); j < batchWriteN; j++ {
+					if err := txn.Set(ctx, key(j), val); err != nil {
+						txn.Discard()
+						b.Fatal(err)
+					}
+				}
+				if err := txn.Commit(); err != nil {
+					txn.Discard()
+					b.Fatal(err)
+				}
+			}
+		},
+	},
+	{
+		// 4 goroutines x 1000 ops per iteration, 90% Get / 10% Set, each goroutine
+		// starting its cursor at t*len(order)/4.
+		//
+		// This deliberately does NOT use b.RunParallel: RunParallel fixes the
+		// goroutine count at p*GOMAXPROCS and splits b.N between them, which cannot
+		// reproduce "4 threads of exactly 1000 ops" on a machine with any other CPU
+		// count. Spawning the four goroutines explicitly matches the Rust lane's
+		// thread::scope shape exactly; the spawn cost per iteration is amortised over
+		// 4000 store operations (and the Rust lane pays a larger one).
+		name: "ParallelMixed", prefillN: PrefillCount, opsPerIter: parallelThreads * parallelOpsPerThread, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			ctx := context.Background()
+			for i := 0; i < b.N; i++ {
+				var wg sync.WaitGroup
+				for t := 0; t < parallelThreads; t++ {
+					wg.Add(1)
+					go func(t int) {
+						defer wg.Done()
+						base := t * (len(order) / parallelThreads)
+						for n := 0; n < parallelOpsPerThread; n++ {
+							k := presentKeys[order[(base+n)%len(order)]]
+							if n%10 == 9 {
+								if err := s.Set(ctx, k, val); err != nil {
+									// b.Fatal is illegal off the benchmark goroutine.
+									b.Error(err)
+									return
+								}
+								continue
+							}
+							v, err := s.Get(ctx, k)
+							if err != nil {
+								b.Error(err)
+								return
+							}
+							if len(v) != len(val) {
+								b.Errorf("unexpected value length: got %d, want %d", len(v), len(val))
+								return
+							}
+						}
+					}(t)
+				}
+				wg.Wait()
+			}
+		},
+	},
+}
+
+// scan runs one full iteration pass with the given options, summing value lengths, and
+// fails the benchmark unless exactly wantCount items were yielded. The count assertion
+// is what stops a silently-empty iterator from looking like a fast one; the Rust lane
+// asserts the same counts.
+func scan(b *testing.B, s corekv.TxnStore, opts corekv.IterOptions, wantCount int) {
+	ctx := context.Background()
+
+	it, err := s.Iterator(ctx, opts)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	n, total := 0, 0
+	for {
+		ok, err := it.Next()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+
+		v, err := it.Value()
+		if err != nil {
+			b.Fatal(err)
+		}
+		total += len(v)
+		n++
+	}
+
+	if err := it.Close(); err != nil {
+		b.Fatal(err)
+	}
+	if n != wantCount {
+		b.Fatalf("iterated %d items, want %d", n, wantCount)
+	}
+	sink += total
+}
+
+// prefill writes keys key(0)..key(n) with a value of the given size. It is always
+// called outside of the timed region.
+//
+// Writes are grouped into transactions of roughly 256 KiB, which keeps prefill time
+// sane without tripping badger's per-transaction size limit. The grouping is not
+// observable in the measurements.
+func prefill(tb testing.TB, s corekv.TxnStore, n int, valueSize int) {
+	ctx := context.Background()
+	val := value(valueSize)
+
+	perTxn := (256 * 1024) / valueSize
+	if perTxn < 1 {
+		perTxn = 1
+	}
+
+	for start := 0; start < n; start += perTxn {
+		end := min(start+perTxn, n)
+
+		txn := s.NewTxn(false)
+		for i := start; i < end; i++ {
+			if err := txn.Set(ctx, key(uint64(i)), val); err != nil {
+				txn.Discard()
+				tb.Fatal(err)
+			}
+		}
+		if err := txn.Commit(); err != nil {
+			txn.Discard()
+			tb.Fatal(err)
+		}
+	}
+}
