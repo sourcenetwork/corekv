@@ -19,7 +19,11 @@ type iterator struct {
 	i *regolith.Iter
 }
 
-var _ corekv.Iterator = (*iterator)(nil)
+var (
+	_ corekv.Iterator      = (*iterator)(nil)
+	_ corekv.ValueAppender = (*iterator)(nil)
+	_ corekv.ValueBorrower = (*iterator)(nil)
+)
 
 // toIterOptions translates corekv's iterator options into regolith's, which
 // have the same fields and the same meanings.
@@ -71,6 +75,46 @@ func (it *iterator) Value() ([]byte, error) {
 		return nil, regolithErrToKVErr(err)
 	}
 	return value, nil
+}
+
+// AppendValue implements [corekv.ValueAppender], appending the value at the
+// current iterator location to the caller's own buffer.
+//
+// The engine hands the value over as a borrowed pointer into its own memory, so
+// this is one copy straight into dst and no allocation when dst has the capacity
+// - where `Value` both copies and allocates.
+func (it *iterator) AppendValue(dst []byte) ([]byte, error) {
+	dst, err := it.i.AppendValue(dst)
+	if err != nil {
+		return nil, regolithErrToKVErr(err)
+	}
+	return dst, nil
+}
+
+// BorrowValue implements [corekv.ValueBorrower], yielding the engine's own value
+// bytes to the given function instead of copying them.
+//
+// The slice given to `fn` points into memory the engine owns, and is valid only
+// for the duration of the call: it must not be retained or mutated, and `fn` must
+// not call back into the iterator, as advancing, seeking, resetting or closing it
+// all invalidate those bytes.  See `regolith.Iter.BorrowValue` for the full
+// lifetime argument.
+//
+// [corekv.ValueBorrower] requires `fn`'s error back unchanged and unwrapped, and
+// `regolithErrToKVErr` would not honour that for an `fn` that happened to return
+// something matching a regolith sentinel.  The two origins are therefore told
+// apart directly: whether `fn` ran at all decides whose error is being returned,
+// as the only failure that can reach here without running `fn` is the store's.
+func (it *iterator) BorrowValue(fn func(value []byte) error) error {
+	called := false
+	err := it.i.BorrowValue(func(value []byte) error {
+		called = true
+		return fn(value)
+	})
+	if called {
+		return err
+	}
+	return regolithErrToKVErr(err)
 }
 
 // Close releases the iterator.  Closing an already closed iterator is a no-op,
