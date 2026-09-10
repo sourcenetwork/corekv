@@ -21,29 +21,51 @@ import (
 
 	"github.com/sourcenetwork/corekv"
 	"github.com/sourcenetwork/corekv/regolith"
+	goregolith "github.com/sourcenetwork/go-regolith"
 )
 
+// regolithLanes registers one lane per engine configuration under test, so that
+// configurations are compared within a single run rather than across runs, where
+// machine state drifts.
+//
+//   - regolith          engine defaults, the baseline every recorded figure used
+//   - regolith-ser      serializable isolation, comparable with badger's SSI
+//   - regolith-inline   transaction_keys_inline raised past the largest transaction
+//
+// The default lane must keep passing nil, so it stays comparable with the untuned
+// badger lane and with the numbers already published for it.
 func init() {
-	factories = append(factories, factory{
-		name: "regolith",
-		new: func(tb testing.TB) corekv.TxnStore {
-			// On disk, engine defaults. A nil options argument is what asks for them
-			// (OptimisticTransactionDb + SnapshotIsolation + DurabilityMode::Eventual),
-			// so nothing is tuned here and the lane stays comparable with the untuned
-			// badger one - and with the figures already recorded for it.
-			dir := tb.TempDir()
-			s, err := regolith.NewDatastore(dir, nil)
-			if err != nil {
-				tb.Fatal(err)
-			}
-			tb.Cleanup(func() {
-				if err := s.Close(); err != nil {
-					tb.Error(err)
+	lanes := []struct {
+		name string
+		opts *goregolith.Options
+	}{
+		{"regolith", nil},
+		{"regolith-ser", &goregolith.Options{Isolation: goregolith.IsolationSerializable}},
+		// The transaction write buffer indexes itself past this many keys, cloning
+		// the key on every later insert. A transaction that only writes never reads
+		// that index back, so above the largest transaction in the suite (1000 keys)
+		// the indexing is pure cost.
+		{"regolith-inline", &goregolith.Options{TransactionKeysInline: goregolith.Uint64(4096)}},
+	}
+
+	for _, lane := range lanes {
+		factories = append(factories, factory{
+			name: lane.name,
+			new: func(tb testing.TB) corekv.TxnStore {
+				dir := tb.TempDir()
+				s, err := regolith.NewDatastore(dir, lane.opts)
+				if err != nil {
+					tb.Fatal(err)
 				}
-			})
-			return s
-		},
-	})
+				tb.Cleanup(func() {
+					if err := s.Close(); err != nil {
+						tb.Error(err)
+					}
+				})
+				return s
+			},
+		})
+	}
 
 	regolithNoop = func() { C.regolith_noop() }
 }
