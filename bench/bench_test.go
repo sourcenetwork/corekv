@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	badgerds "github.com/dgraph-io/badger/v4"
 
@@ -59,9 +60,31 @@ func init() {
 // design outlive the benchmark that created them.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	closeSharedStores()
+
+	// Bound the teardown.  A store's Close can fail to return here - badger's has
+	// been observed waiting on its background workers indefinitely after a
+	// hundred-thousand-key run - which leaves the test binary alive and burning
+	// CPU after PASS.  That is worse than it sounds: the next benchmark started on
+	// the same machine is then measured against a busy CPU, which silently shifts
+	// its numbers.  The process is about to exit and reclaim everything anyway, so
+	// a store that will not close promptly is not worth waiting for.
+	done := make(chan struct{})
+	go func() {
+		closeSharedStores()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(closeTimeout):
+		fmt.Fprintf(os.Stderr, "bench: shared stores did not close within %s, exiting anyway\n", closeTimeout)
+	}
+
 	os.Exit(code)
 }
+
+// closeTimeout bounds the shared-store teardown in TestMain.
+const closeTimeout = 30 * time.Second
 
 // sharedTB adapts a *testing.B so that resources it creates outlive that benchmark.
 // Failures still go to the benchmark that triggered the construction, but TempDir and
