@@ -766,6 +766,7 @@ func TestOpenWithOptions(t *testing.T) {
 		"noWorker": {MaxBackgroundCompactions: regolith.Uint64(0)},
 		"noCache":  {BlockCacheSize: regolith.Uint64(0)},
 		"durable":  {Durability: regolith.DurabilityImmediate},
+		"strict":   {Isolation: regolith.IsolationSerializable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store, err := NewDatastore(t.TempDir(), opts)
@@ -803,5 +804,116 @@ func TestOpenWithAnInvalidOption(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "write_buffer_size") {
 		t.Errorf("error does not name the field: %v", err)
+	}
+}
+
+// TestIsolationDecidesWhetherWriteSkewCommits is the behavioural check on the
+// store-level isolation option: the same schedule, run against stores that
+// differ only in that field, has to end differently.
+//
+// Write skew is two transactions each reading the key the other is about to
+// write, with disjoint write sets.  No serial order produces it, but only
+// serializable validation has a read set big enough to see it: snapshot
+// isolation validates what a transaction wrote, so both commit.
+func TestIsolationDecidesWhetherWriteSkewCommits(t *testing.T) {
+	for name, test := range map[string]struct {
+		opts     *regolith.Options
+		conflict bool
+	}{
+		// Unset is regolith's default, so this is the behaviour the store has
+		// always had.
+		"default":       {nil, false},
+		"readCommitted": {&regolith.Options{Isolation: regolith.IsolationReadCommitted}, false},
+		"snapshot":      {&regolith.Options{Isolation: regolith.IsolationSnapshot}, false},
+		"serializable":  {&regolith.Options{Isolation: regolith.IsolationSerializable}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			store, err := NewDatastore(t.TempDir(), test.opts)
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			defer func() {
+				if err := store.Close(); err != nil {
+					t.Errorf("close: %v", err)
+				}
+			}()
+
+			for _, key := range []string{"x", "y"} {
+				if err := store.Set(ctx, []byte(key), []byte("0")); err != nil {
+					t.Fatalf("seed %s: %v", key, err)
+				}
+			}
+
+			first := store.NewTxn(false)
+			defer first.Discard()
+			second := store.NewTxn(false)
+			defer second.Discard()
+
+			// Plain reads, so snapshot isolation validates neither of them.
+			if value, err := first.Get(ctx, []byte("y")); err != nil || string(value) != "0" {
+				t.Fatalf("first read: got %q, %v", value, err)
+			}
+			if value, err := second.Get(ctx, []byte("x")); err != nil || string(value) != "0" {
+				t.Fatalf("second read: got %q, %v", value, err)
+			}
+			if err := first.Set(ctx, []byte("x"), []byte("1")); err != nil {
+				t.Fatalf("first set: %v", err)
+			}
+			if err := second.Set(ctx, []byte("y"), []byte("1")); err != nil {
+				t.Fatalf("second set: %v", err)
+			}
+
+			if err := first.Commit(); err != nil {
+				t.Fatalf("first commit: %v", err)
+			}
+			err = second.Commit()
+			switch {
+			case test.conflict && !errors.Is(err, corekv.ErrTxnConflict):
+				t.Errorf("second commit: got %v, want corekv.ErrTxnConflict", err)
+			case !test.conflict && err != nil:
+				t.Errorf("second commit: got %v, want it to commit", err)
+			}
+		})
+	}
+}
+
+// TestSerializableStillConflictsOnAWriteWriteOverlap guards the other
+// direction: serializable only ever adds to the validation set, so everything
+// snapshot isolation rejected it has to reject too.
+func TestSerializableStillConflictsOnAWriteWriteOverlap(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewDatastore(t.TempDir(), &regolith.Options{
+		Isolation: regolith.IsolationSerializable,
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	}()
+
+	if err := store.Set(ctx, []byte("k"), []byte("v0")); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	first := store.NewTxn(false)
+	defer first.Discard()
+	second := store.NewTxn(false)
+	defer second.Discard()
+
+	if err := first.Set(ctx, []byte("k"), []byte("v1")); err != nil {
+		t.Fatalf("first set: %v", err)
+	}
+	if err := second.Set(ctx, []byte("k"), []byte("v2")); err != nil {
+		t.Fatalf("second set: %v", err)
+	}
+	if err := first.Commit(); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	if err := second.Commit(); !errors.Is(err, corekv.ErrTxnConflict) {
+		t.Errorf("second commit: got %v, want corekv.ErrTxnConflict", err)
 	}
 }

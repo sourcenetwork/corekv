@@ -7,9 +7,17 @@
 // checkout before `go build` here, otherwise the link will fail with a missing
 // `ffi/target/release/libregolith_ffi.a`.  See the `replace` in `go.mod`.
 //
-// Transactions are optimistic with snapshot isolation, so a commit that lost a
-// validation race returns [corekv.ErrTxnConflict] and should be retried from a
-// new transaction.  This matches the badger store's behaviour.
+// Transactions are optimistic, so a commit that lost a validation race returns
+// [corekv.ErrTxnConflict] and should be retried from a new transaction.  This
+// matches the badger store's behaviour.
+//
+// They run at snapshot isolation unless the store was opened with another level.
+// The level is a store-level setting - the `Isolation` field of
+// [github.com/sourcenetwork/go-regolith.Options] - because [Datastore.NewTxn]
+// leaves no room for a per-transaction one.  Snapshot isolation aborts on a
+// write-write overlap and admits write skew; badger validates a transaction's
+// read set as well, which is what go-regolith's `IsolationSerializable`
+// asks for.
 //
 // Some important limitations to consider:
 //
@@ -125,6 +133,7 @@ func (d *Datastore) Close() error {
 	return regolithErrToKVErr(err)
 }
 
+// NewTxn begins a transaction at the isolation level the store was opened with.
 func (d *Datastore) NewTxn(readonly bool) corekv.Txn {
 	// This error is only returned when the db is closed.
 	// We store it for later and return it from all functions
