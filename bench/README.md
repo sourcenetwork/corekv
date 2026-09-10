@@ -39,10 +39,13 @@ BenchmarkGetHit/badger/v64
 BenchmarkGetHit/badger/v4096
 BenchmarkScanAll/memory/v64
 BenchmarkFFINoop              # no lane/size; skips without -tags regolith
+BenchmarkTxnContendedHot8/badger/v64    # contention level in the workload name
 ```
 
 Workloads: `SeqWrite RandWrite GetHit GetMiss Has ScanAll ScanReverse ScanPrefix TxnWrite
-TxnReadWrite BatchWrite ParallelMixed` — one top-level `Benchmark*` per row of the spec table.
+TxnReadWrite BatchWrite ParallelMixed` — one top-level `Benchmark*` per row of the spec table —
+plus `TxnContendedHot8` and `TxnContendedHot4096`, which are not in the spec table (see
+"Contended transactions" below).
 
 ## Reading the output
 
@@ -67,6 +70,51 @@ The `ns/op-key` divisor, which must stay equal to the Rust baseline's `Throughpu
 | GetMiss | 1000 | TxnWrite | 100 |
 | Has | 1000 | TxnReadWrite | 20 |
 | BatchWrite | 1000 | ParallelMixed | 4000 |
+| TxnContendedHot8 | 800 | TxnContendedHot4096 | 800 |
+
+## Contended transactions
+
+Every other workload here is uncontended: transactions run one at a time, so no commit can
+conflict, and the cost of a conflict is never measured. `TxnContended` is the one that does.
+It has **no counterpart in the Rust baseline** and is outside the fidelity contract below.
+
+Shape, identical in every lane:
+
+- 4 goroutines (`parallelThreads`, so it is comparable with `ParallelMixed`) commit
+  concurrently against **one shared store**, 25 committed transactions each per iteration.
+- Each transaction is a read-modify-write over a **hot key range**: 4 `Get`s then 4 `Set`s on
+  keys drawn from `key(0)..key(hotN)`. The reads are what make a conflict possible under
+  snapshot isolation; the writes are what make other transactions' reads conflict.
+- On `corekv.ErrTxnConflict` the whole transaction is replayed from a **fresh** `NewTxn` -
+  what a real caller must do. Retries are capped at 100 per logical transaction and hitting
+  the cap fails the benchmark, so a livelock shows up as a failure and not as a hang.
+- Every transaction eventually commits, and the count of commits is asserted, so the measured
+  unit is a **successful** commit. `opsPerIter` counts only committed operations: the time
+  spent on attempts that conflicted and were discarded is charged to the survivors, which is
+  what the caller actually pays.
+- Key *selection* is seeded (its own `newRng(Seed)` walk, so the fidelity-pinned sequences are
+  untouched) and therefore identical in every lane and at both value sizes. Which transactions
+  actually race is up to the scheduler and is not deterministic.
+
+The contention knob is the hot-range size, and each level is its own top-level benchmark:
+
+| benchmark | hot range | expectation |
+|---|---|---|
+| `TxnContendedHot8` | 8 keys | heavily contended, conflicts are the norm |
+| `TxnContendedHot4096` | 4096 keys | mildly contended, conflicts are rare |
+
+Reported metrics, on top of the usual `ns/op-key`:
+
+```
+conflicts/attempt   retries / total commit attempts   <- the conflict rate; the point of this workload
+retries/txn         retries / successful commits      <- the same information per committed txn
+```
+
+The `memory` lane runs this workload like any other and is **not** skipped: memory is MVCC and
+returns `ErrTxnConflict` from `Commit` too, so its number is meaningful and it stays the sanity
+control. A lane whose store could not conflict at all would report an honest `0` with the retry
+loop never firing - but there is no such lane in this suite, and a store without transactions
+could not be a `corekv.TxnStore` in the first place.
 
 ## Fidelity with the Rust baseline
 
@@ -111,6 +159,9 @@ Known, deliberate divergences:
 - Seed 42 for every random ordering, so all lanes touch keys in the same sequence.
 - Every error fails the benchmark. `GetMiss` asserts `corekv.ErrNotFound`; the scans assert the
   exact item count, so an empty iterator cannot masquerade as a fast one.
+- Errors from a worker goroutine are collected and raised on the benchmark's own goroutine.
+  `b.Fatal` off the benchmark goroutine only `runtime.Goexit`s that goroutine, which would
+  leave the benchmark running with a worker silently missing.
 - badger runs **on disk** in a temp dir (regolith is a disk engine; in-memory badger would not be
   a fair comparison) with `badger.DefaultOptions`. No engine's knobs are tuned, in either lane.
 

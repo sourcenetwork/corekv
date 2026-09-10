@@ -16,7 +16,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sourcenetwork/corekv"
@@ -514,4 +516,211 @@ func prefill(tb testing.TB, s corekv.TxnStore, n int, valueSize int) {
 			tb.Fatal(err)
 		}
 	}
+}
+
+// --- TxnContended ------------------------------------------------------------------
+//
+// Every other workload in this suite is uncontended: transactions run one at a time, so
+// no commit can ever conflict. TxnContended is the opposite, and it is the only workload
+// whose headline number is not a latency. regolith's transactions are optimistic, so
+// under contention a commit can fail validation and surface corekv.ErrTxnConflict to the
+// caller, who must replay the whole transaction; badger uses serializable snapshot
+// isolation and conflicts as well. What that costs is what this measures.
+//
+// It has no counterpart in rust-baseline/benches/workloads.rs, so it is outside the
+// bit-for-bit fidelity contract above. Nothing it touches changes the existing
+// workloads: the draws below come from their own newRng(Seed) walk.
+
+const (
+	// txnContendedWorkers is the number of goroutines committing concurrently. It is
+	// parallelThreads, deliberately, so that TxnContended and ParallelMixed describe
+	// the same amount of concurrency.
+	txnContendedWorkers = parallelThreads
+
+	// txnContendedTxnsPerWorker is the number of transactions each worker must get
+	// *committed* per b.N iteration. Retried attempts do not count towards it.
+	txnContendedTxnsPerWorker = 25
+
+	// txnContendedReads / txnContendedWrites size one transaction's read-modify-write
+	// over the hot range. Reads are what make a conflict possible at all under SSI,
+	// writes are what make other transactions' reads conflict.
+	txnContendedReads  = 4
+	txnContendedWrites = 4
+
+	// txnContendedMaxRetries caps the replays of a single logical transaction. A
+	// livelock must fail the benchmark rather than hang it, so hitting the cap is
+	// fatal and is reported as such.
+	txnContendedMaxRetries = 100
+)
+
+// txnContendedHotSizes are the hot-range sizes registered as contention levels: 8 keys,
+// where four workers writing four keys each collide almost every time, and 4096 keys,
+// where they rarely meet. The hot range is the only knob; everything else is held equal
+// between the two levels.
+var txnContendedHotSizes = []int{8, 4096}
+
+// txnContendedDraws are the seeded random draws that pick which hot keys each
+// transaction touches: one draw per read and per write slot, for every worker and every
+// transaction of an iteration. Taking them from a dedicated newRng(Seed) walk (rather
+// than from `order`) keeps key selection identical in every lane and at every value
+// size, while leaving the fidelity-pinned sequences in init() untouched. Scheduling is
+// of course not deterministic - which transactions actually race is up to the runtime -
+// but which keys they reach for is.
+var txnContendedDraws []uint64
+
+func init() {
+	r := newRng(Seed)
+	n := txnContendedWorkers * txnContendedTxnsPerWorker * (txnContendedReads + txnContendedWrites)
+	txnContendedDraws = make([]uint64, n)
+	for i := range txnContendedDraws {
+		txnContendedDraws[i] = r.next()
+	}
+
+	for _, hot := range txnContendedHotSizes {
+		workloads = append(workloads, txnContended(hot))
+	}
+}
+
+// txnContended builds the TxnContended workload for one hot-range size.
+//
+// opsPerIter counts only the operations of transactions that *committed*: the unit of
+// this benchmark is a successful commit, so the time spent on attempts that conflicted
+// and were thrown away is charged to the surviving ones. That is what a caller actually
+// pays, and it keeps ns/op-key comparable with every other row of the table.
+func txnContended(hotN int) workload {
+	return workload{
+		name: fmt.Sprintf("TxnContendedHot%d", hotN),
+		// The fixture is at least as large as the other transactional workloads', so
+		// the hot range sits inside a store of a realistic size rather than in a
+		// store that holds nothing else.
+		prefillN:    max(hotN, batchWriteN),
+		opsPerIter:  txnContendedWorkers * txnContendedTxnsPerWorker * (txnContendedReads + txnContendedWrites),
+		movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			runTxnContended(b, s, val, hotN)
+		},
+	}
+}
+
+func runTxnContended(b *testing.B, s corekv.TxnStore, val []byte, hotN int) {
+	ctx := context.Background()
+
+	// attempts counts every Commit() call, commits only the ones that succeeded;
+	// retries is the difference. Both are local to this call, so each of Go's
+	// growing-b.N attempts reports the rate it actually measured.
+	var attempts, commits atomic.Int64
+
+	// b.Fatal off the benchmark's own goroutine only calls runtime.Goexit on that
+	// goroutine: the benchmark would carry on with a worker silently missing. Workers
+	// therefore record the first error and stop; the benchmark goroutine fails on it
+	// below.
+	var (
+		errMu    sync.Mutex
+		firstErr error
+	)
+	fail := func(err error) {
+		errMu.Lock()
+		defer errMu.Unlock()
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	failed := func() bool {
+		errMu.Lock()
+		defer errMu.Unlock()
+		return firstErr != nil
+	}
+
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for w := 0; w < txnContendedWorkers; w++ {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for t := 0; t < txnContendedTxnsPerWorker; t++ {
+					if failed() {
+						return
+					}
+
+					base := (w*txnContendedTxnsPerWorker + t) * (txnContendedReads + txnContendedWrites)
+					for retries := 0; ; retries++ {
+						attempts.Add(1)
+						err := txnContendedAttempt(ctx, s, val, hotN, base)
+						if err == nil {
+							commits.Add(1)
+							break
+						}
+						if !errors.Is(err, corekv.ErrTxnConflict) {
+							fail(err)
+							return
+						}
+						// A conflict is the caller's problem to retry, from a
+						// wholly fresh transaction - the conflicted one cannot
+						// be reused.
+						if retries >= txnContendedMaxRetries {
+							fail(fmt.Errorf(
+								"transaction livelocked: still conflicting after %d retries, hot range %d keys",
+								txnContendedMaxRetries, hotN,
+							))
+							return
+						}
+					}
+				}
+			}(w)
+		}
+		wg.Wait()
+
+		if failed() {
+			break
+		}
+	}
+
+	if firstErr != nil {
+		b.Fatal(firstErr)
+	}
+
+	// The point of the whole workload. conflicts/attempt is retries / total attempts,
+	// i.e. the fraction of transactions that had to be thrown away; retries/txn is the
+	// same information per successful commit, which is the figure that explains the
+	// ns/op-key.
+	att, com := attempts.Load(), commits.Load()
+	if want := int64(b.N) * txnContendedWorkers * txnContendedTxnsPerWorker; com != want {
+		b.Fatalf("committed %d transactions, want %d", com, want)
+	}
+	retries := att - com
+	b.ReportMetric(float64(retries)/float64(att), "conflicts/attempt")
+	b.ReportMetric(float64(retries)/float64(com), "retries/txn")
+}
+
+// txnContendedAttempt runs one transaction: a read-modify-write over the hot range,
+// followed by a commit. It returns corekv.ErrTxnConflict if the commit lost, in which
+// case the caller must replay it from a fresh transaction.
+//
+// The transaction is discarded on every path, including the conflict and error ones -
+// Discard after a successful Commit is a no-op in every store, and for regolith a
+// transaction left open is not merely untidy.
+func txnContendedAttempt(ctx context.Context, s corekv.TxnStore, val []byte, hotN, base int) error {
+	txn := s.NewTxn(false)
+	defer txn.Discard()
+
+	for i := 0; i < txnContendedReads; i++ {
+		v, err := txn.Get(ctx, presentKeys[txnContendedDraws[base+i]%uint64(hotN)])
+		if err != nil {
+			return err
+		}
+		// Stands in for the black-box `sink` the other workloads use: writing to
+		// that global from four goroutines would be a data race.
+		if len(v) != len(val) {
+			return fmt.Errorf("unexpected value length: got %d, want %d", len(v), len(val))
+		}
+	}
+
+	for i := 0; i < txnContendedWrites; i++ {
+		k := presentKeys[txnContendedDraws[base+txnContendedReads+i]%uint64(hotN)]
+		if err := txn.Set(ctx, k, val); err != nil {
+			return err
+		}
+	}
+
+	return txn.Commit()
 }
