@@ -186,7 +186,13 @@ type ValueBorrower interface {
 	// If the iterator is currently at an invalid location it's behaviour is undefined:
 	// https://github.com/sourcenetwork/corekv/issues/37
 	//
-	// Any error returned by fn is returned unchanged.
+	// Any error returned by fn is returned by BorrowValue unchanged and unwrapped -
+	// implementations must not add context to it.
+	//
+	// A caller therefore cannot tell a store-side failure from their own callback's
+	// failure by inspecting the returned error alone.  Callers that need to distinguish
+	// the two should use their own sentinel error, or record the failure in a variable
+	// captured by the closure.
 	BorrowValue(fn func(value []byte) error) error
 }
 
