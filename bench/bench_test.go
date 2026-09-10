@@ -228,3 +228,13 @@ func BenchmarkTxnWrite(b *testing.B)      { runWorkload(b, "TxnWrite") }
 func BenchmarkTxnReadWrite(b *testing.B)  { runWorkload(b, "TxnReadWrite") }
 func BenchmarkBatchWrite(b *testing.B)    { runWorkload(b, "BatchWrite") }
 func BenchmarkParallelMixed(b *testing.B) { runWorkload(b, "ParallelMixed") }
+
+// TxnContended is registered once per contention level (the hot-range size), so that the
+// two levels are separate, greppable top-level benchmarks rather than a sub-case of one.
+// The memory lane is included deliberately: memory is MVCC and returns ErrTxnConflict
+// too, so it remains the sanity control here as elsewhere. Only a store with no
+// transactional conflict detection at all would have to be skipped, and there is none in
+// this suite - the retry loop would simply never fire, and the reported conflict rate
+// would be an honest 0.
+func BenchmarkTxnContendedHot8(b *testing.B)    { runWorkload(b, "TxnContendedHot8") }
+func BenchmarkTxnContendedHot4096(b *testing.B) { runWorkload(b, "TxnContendedHot4096") }
