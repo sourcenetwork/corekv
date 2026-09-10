@@ -61,13 +61,13 @@ func init() {
 func TestMain(m *testing.M) {
 	code := m.Run()
 
-	// Bound the teardown.  A store's Close can fail to return here - badger's has
-	// been observed waiting on its background workers indefinitely after a
-	// hundred-thousand-key run - which leaves the test binary alive and burning
-	// CPU after PASS.  That is worse than it sounds: the next benchmark started on
-	// the same machine is then measured against a busy CPU, which silently shifts
-	// its numbers.  The process is about to exit and reclaim everything anyway, so
-	// a store that will not close promptly is not worth waiting for.
+	// Bound the teardown as a backstop.  A store's Close can fail to return here -
+	// badger's, for one, retries a failed memtable flush forever rather than
+	// erroring - which leaves the test binary alive and burning CPU after PASS.
+	// That is worse than it sounds: the next benchmark run on the same machine is
+	// then measured against a busy CPU, which silently shifts its numbers.  The
+	// process is about to exit and reclaim everything anyway, so a store that will
+	// not close promptly is not worth waiting for.
 	done := make(chan struct{})
 	go func() {
 		closeSharedStores()
@@ -142,8 +142,13 @@ func sharedPrefilled(b *testing.B, f factory, valueSize int) corekv.TxnStore {
 func closeSharedStores() {
 	sharedMu.Lock()
 	defer sharedMu.Unlock()
-	for _, f := range sharedCleanups {
-		f()
+	// Last-registered-first, matching testing.TB.Cleanup's own ordering.  A store
+	// registers its temp dir before the close that must happen inside it, so running
+	// these in registration order would delete a badger store's directory out from
+	// under the still-open DB - after which badger's memtable flush cannot create its
+	// L0 table, retries that failure forever, and Close never returns.
+	for i := len(sharedCleanups) - 1; i >= 0; i-- {
+		sharedCleanups[i]()
 	}
 	sharedCleanups = nil
 	sharedStores = map[string]corekv.TxnStore{}
