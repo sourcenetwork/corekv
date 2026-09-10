@@ -44,7 +44,7 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -80,7 +80,7 @@ func (n *txnCommit) Apply(source action.Actions) action.Actions {
 				panic("TODO")
 			}
 
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			newActions = append(newActions, a)
 			continue
 
@@ -169,7 +169,7 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -197,7 +197,7 @@ func (n *txnDiscard) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			result[newIndex] = a
 
 			if i == lastCreateStoreIndex {
@@ -265,7 +265,7 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 
 	for i, a := range source {
 		switch typedA := a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			lastCreateStoreIndex = i
 
 		case *action.CancelCtx, *action.CloseStore:
@@ -293,7 +293,7 @@ func (n *txnMulti) Apply(source action.Actions) action.Actions {
 		newIndex := i + indexOffset
 
 		switch a.(type) {
-		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore:
+		case *action.NewStore, *action.NewBadgerStore, *action.NewMemoryStore, *action.NewLevelStore, *action.NewRegolithStore:
 			result[newIndex] = a
 
 			if i == lastCreateStoreIndex {

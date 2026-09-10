@@ -10,6 +10,7 @@ require (
 	github.com/sourcenetwork/corekv/leveldb v0.0.0
 	github.com/sourcenetwork/corekv/memory v0.0.0
 	github.com/sourcenetwork/corekv/namespace v0.0.0
+	github.com/sourcenetwork/corekv/regolith v0.0.0
 	github.com/sourcenetwork/immutable v0.3.0
 	github.com/stretchr/testify v1.10.0
 )
@@ -25,6 +26,7 @@ require (
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sourcenetwork/go-regolith v0.0.0 // indirect
 	github.com/sourcenetwork/goleveldb v0.0.0-20251217012629-27249d06b81b // indirect
 	github.com/tidwall/btree v1.7.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -44,4 +46,11 @@ replace (
 	github.com/sourcenetwork/corekv/leveldb v0.0.0 => ../leveldb
 	github.com/sourcenetwork/corekv/memory v0.0.0 => ../memory
 	github.com/sourcenetwork/corekv/namespace v0.0.0 => ../namespace
+	github.com/sourcenetwork/corekv/regolith v0.0.0 => ../regolith
 )
+
+// go-regolith is cgo over a Rust staticlib that cannot be built inside the
+// read-only module cache, so it can only be consumed from a sibling checkout.
+// See the same note in regolith/go.mod.  A `replace` in a dependency's go.mod
+// is ignored, so it has to be repeated in every main module that reaches it.
+replace github.com/sourcenetwork/go-regolith v0.0.0 => ../../go-regolith
