@@ -218,7 +218,10 @@ type workload struct {
 	run func(b *testing.B, s corekv.TxnStore, val []byte)
 }
 
-// workloads are the 12 workloads of the spec table, in spec order.
+// workloads are the 12 workloads of the spec table, in spec order, plus ScanAllAppend
+// and ScanAllBorrow (variants of ScanAll that read values through the optional
+// [corekv.ValueAppender] / [corekv.ValueBorrower] interfaces, and have no Rust
+// counterparts).
 var workloads = []workload{
 	{
 		// Successive iterations rewrite the same 10k keys, exactly as the Rust lane
@@ -313,6 +316,38 @@ var workloads = []workload{
 		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
 			for i := 0; i < b.N; i++ {
 				scan(b, s, corekv.DefaultIterOptions, PrefillCount)
+			}
+		},
+	},
+	{
+		// The same scan as ScanAll, but reading each value through
+		// [corekv.ValueAppender] with a single re-used buffer where the iterator
+		// implements it, falling back to `Value` where it does not. The difference
+		// against ScanAll is the cost of one allocation per value.
+		//
+		// This workload has no Rust counterpart - it measures a property of the Go
+		// interface, not of the engine - so it is excluded from the fidelity
+		// comparison. Its opsPerIter matches ScanAll so the two are directly
+		// comparable.
+		name: "ScanAllAppend", prefillN: PrefillCount, readOnly: true, opsPerIter: PrefillCount, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			for i := 0; i < b.N; i++ {
+				scanAppend(b, s, corekv.DefaultIterOptions, PrefillCount)
+			}
+		},
+	},
+	{
+		// The same scan again, but reading each value through [corekv.ValueBorrower],
+		// which copies nothing at all, falling back to `Value` where the iterator
+		// does not implement it.
+		//
+		// Like ScanAllAppend this has no Rust counterpart and shares ScanAll's
+		// opsPerIter, so the three are directly comparable:
+		// ScanAll = alloc + copy, ScanAllAppend = copy, ScanAllBorrow = neither.
+		name: "ScanAllBorrow", prefillN: PrefillCount, readOnly: true, opsPerIter: PrefillCount, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, _ []byte) {
+			for i := 0; i < b.N; i++ {
+				scanBorrow(b, s, corekv.DefaultIterOptions, PrefillCount)
 			}
 		},
 	},
@@ -474,6 +509,113 @@ func scan(b *testing.B, s corekv.TxnStore, opts corekv.IterOptions, wantCount in
 			b.Fatal(err)
 		}
 		total += len(v)
+		n++
+	}
+
+	if err := it.Close(); err != nil {
+		b.Fatal(err)
+	}
+	if n != wantCount {
+		b.Fatalf("iterated %d items, want %d", n, wantCount)
+	}
+	sink += total
+}
+
+// scanAppend is `scan`, but reading values through [corekv.ValueAppender] with a single
+// buffer re-used across the whole iteration, so that the scan performs no per-value
+// allocation. Iterators that do not implement the optional interface fall back to
+// `Value`, making this workload meaningful (if identical to ScanAll) in every lane.
+func scanAppend(b *testing.B, s corekv.TxnStore, opts corekv.IterOptions, wantCount int) {
+	ctx := context.Background()
+
+	it, err := s.Iterator(ctx, opts)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	appender, canAppend := it.(corekv.ValueAppender)
+	buf := make([]byte, 0, 4096)
+
+	n, total := 0, 0
+	for {
+		ok, err := it.Next()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+
+		var v []byte
+		if canAppend {
+			v, err = appender.AppendValue(buf[:0])
+			// Retain any buffer growth for the next item.
+			buf = v
+		} else {
+			v, err = it.Value()
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
+		total += len(v)
+		n++
+	}
+
+	if err := it.Close(); err != nil {
+		b.Fatal(err)
+	}
+	if n != wantCount {
+		b.Fatalf("iterated %d items, want %d", n, wantCount)
+	}
+	sink += total
+}
+
+// scanBorrow is `scan`, but reading values through [corekv.ValueBorrower], so that the
+// store copies nothing at all. Iterators that do not implement the optional interface
+// fall back to `Value`, making this workload meaningful (if identical to ScanAll) in
+// every lane.
+//
+// The value length is summed inside the callback and ends up in `sink`, the harness'
+// black_box, so that neither the read nor the callback can be optimised away.
+func scanBorrow(b *testing.B, s corekv.TxnStore, opts corekv.IterOptions, wantCount int) {
+	ctx := context.Background()
+
+	it, err := s.Iterator(ctx, opts)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	borrower, canBorrow := it.(corekv.ValueBorrower)
+
+	n, total := 0, 0
+
+	// The callback is built once, outside the loop: a function literal created inside
+	// the loop would be heap-allocated on every iteration, which is exactly the cost
+	// this workload exists to measure the absence of.
+	accumulate := func(value []byte) error {
+		total += len(value)
+		return nil
+	}
+
+	for {
+		ok, err := it.Next()
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+
+		if canBorrow {
+			err = borrower.BorrowValue(accumulate)
+		} else {
+			var v []byte
+			v, err = it.Value()
+			total += len(v)
+		}
+		if err != nil {
+			b.Fatal(err)
+		}
 		n++
 	}
 

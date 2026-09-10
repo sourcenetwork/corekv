@@ -222,6 +222,8 @@ func BenchmarkGetHit(b *testing.B)        { runWorkload(b, "GetHit") }
 func BenchmarkGetMiss(b *testing.B)       { runWorkload(b, "GetMiss") }
 func BenchmarkHas(b *testing.B)           { runWorkload(b, "Has") }
 func BenchmarkScanAll(b *testing.B)       { runWorkload(b, "ScanAll") }
+func BenchmarkScanAllAppend(b *testing.B) { runWorkload(b, "ScanAllAppend") }
+func BenchmarkScanAllBorrow(b *testing.B) { runWorkload(b, "ScanAllBorrow") }
 func BenchmarkScanReverse(b *testing.B)   { runWorkload(b, "ScanReverse") }
 func BenchmarkScanPrefix(b *testing.B)    { runWorkload(b, "ScanPrefix") }
 func BenchmarkTxnWrite(b *testing.B)      { runWorkload(b, "TxnWrite") }
