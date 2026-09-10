@@ -9,7 +9,8 @@ import (
 )
 
 func (a *NewRegolithStore) Execute(s *state.State) {
-	store, err := regolith.NewDatastore(s.T.TempDir())
+	// Engine defaults, as before the options parameter existed.
+	store, err := regolith.NewDatastore(s.T.TempDir(), nil)
 	require.NoError(s.T, err)
 
 	s.Rootstore = store

@@ -27,12 +27,12 @@ func init() {
 	factories = append(factories, factory{
 		name: "regolith",
 		new: func(tb testing.TB) corekv.TxnStore {
-			// On disk, engine defaults. regolith's own Options are not exposed across
-			// the FFI, so NewDatastore takes no options parameter - the defaults
-			// (OptimisticTransactionDb + SnapshotIsolation + DurabilityMode::Eventual)
-			// are always used. Nothing is tuned, matching the untuned badger lane.
+			// On disk, engine defaults. A nil options argument is what asks for them
+			// (OptimisticTransactionDb + SnapshotIsolation + DurabilityMode::Eventual),
+			// so nothing is tuned here and the lane stays comparable with the untuned
+			// badger one - and with the figures already recorded for it.
 			dir := tb.TempDir()
-			s, err := regolith.NewDatastore(dir)
+			s, err := regolith.NewDatastore(dir, nil)
 			if err != nil {
 				tb.Fatal(err)
 			}

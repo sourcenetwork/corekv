@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/sourcenetwork/go-regolith"
 
 	"github.com/sourcenetwork/corekv"
 )
@@ -16,7 +19,7 @@ import (
 func newStore(t *testing.T) *Datastore {
 	t.Helper()
 
-	store, err := NewDatastore(t.TempDir())
+	store, err := NewDatastore(t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -83,7 +86,7 @@ func assertKeys(t *testing.T, expected, actual []string) {
 }
 
 func TestOpenAndClose(t *testing.T) {
-	store, err := NewDatastore(t.TempDir())
+	store, err := NewDatastore(t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -105,7 +108,7 @@ func TestOpenUnusablePath(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := NewDatastore(path)
+	_, err := NewDatastore(path, nil)
 	if err == nil {
 		t.Fatal("expected an error opening a path that is not a directory")
 	}
@@ -747,5 +750,58 @@ func closeIter(t *testing.T, it corekv.Iterator) {
 
 	if err := it.Close(); err != nil {
 		t.Errorf("iterator close: %v", err)
+	}
+}
+
+// TestOpenWithOptions covers the options parameter: a nil one is the engine
+// defaults, a set field reaches the engine, and an invalid one is rejected with
+// the field named rather than clamped.
+func TestOpenWithOptions(t *testing.T) {
+	ctx := context.Background()
+
+	for name, opts := range map[string]*regolith.Options{
+		"nil":      nil,
+		"zero":     {},
+		"tuned":    {TransactionKeysInline: regolith.Uint64(8)},
+		"noWorker": {MaxBackgroundCompactions: regolith.Uint64(0)},
+		"noCache":  {BlockCacheSize: regolith.Uint64(0)},
+		"durable":  {Durability: regolith.DurabilityImmediate},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, err := NewDatastore(t.TempDir(), opts)
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			defer func() {
+				if err := store.Close(); err != nil {
+					t.Errorf("close: %v", err)
+				}
+			}()
+
+			if err := store.Set(ctx, []byte("k"), []byte("v")); err != nil {
+				t.Fatalf("set: %v", err)
+			}
+			value, err := store.Get(ctx, []byte("k"))
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if string(value) != "v" {
+				t.Errorf("get: got %q, want %q", value, "v")
+			}
+		})
+	}
+}
+
+func TestOpenWithAnInvalidOption(t *testing.T) {
+	// regolith requires a non-zero write buffer, and validates its options
+	// before touching the filesystem, so nothing is created.
+	_, err := NewDatastore(t.TempDir(), &regolith.Options{
+		WriteBufferSize: regolith.Uint64(0),
+	})
+	if err == nil {
+		t.Fatal("expected an error for a zero write buffer")
+	}
+	if !strings.Contains(err.Error(), "write_buffer_size") {
+		t.Errorf("error does not name the field: %v", err)
 	}
 }

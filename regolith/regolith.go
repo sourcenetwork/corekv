@@ -17,9 +17,9 @@
 // and an iterator created from a transaction must be closed before that
 // transaction is committed or discarded.  The same ordering that badger requires.
 //
-// - regolith's own `Options` are not exposed across the FFI yet, so the store is
-// always opened with the engine defaults and [NewDatastore] takes no options
-// parameter.  This is a current limitation of the FFI layer, not a design choice.
+// - Only a small subset of regolith's engine `Options` crosses the FFI so far,
+// so only that subset can be passed to [NewDatastore].  See
+// [github.com/sourcenetwork/go-regolith.Options].
 package regolith
 
 import (
@@ -37,12 +37,20 @@ type Datastore struct {
 var _ corekv.TxnStore = (*Datastore)(nil)
 var _ corekv.Dropable = (*Datastore)(nil)
 
-// NewDatastore opens (or creates) a regolith store at the given path.
+// NewDatastore opens (or creates) a regolith store at the given path with the
+// given engine options, following the same shape as the leveldb store's
+// constructor: the options are the engine's own type, and a nil `opts` means the
+// engine defaults.
 //
-// There is no options parameter because regolith's `Options` are not yet
-// exposed across the FFI boundary; the engine defaults are always used.
-func NewDatastore(path string) (*Datastore, error) {
-	db, err := regolith.Open(path)
+// A zero [github.com/sourcenetwork/go-regolith.Options] means the same thing, as
+// only the fields explicitly set on it are applied.  Note that for several of
+// those fields zero is a real setting rather than an absence of one, which is
+// why the numeric ones are pointers.
+func NewDatastore(path string, opts *regolith.Options) (*Datastore, error) {
+	if opts == nil {
+		opts = &regolith.Options{}
+	}
+	db, err := regolith.OpenWith(path, *opts)
 	if err != nil {
 		return nil, regolithErrToKVErr(err)
 	}
