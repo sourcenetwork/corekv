@@ -10,7 +10,8 @@
 //!   * random orders come from the `Rng` below, seeded 42, shuffled with the
 //!     descending Fisher-Yates in `shuffled()`. The Go lane reproduces this
 //!     algorithm bit-for-bit;
-//!   * `Options::default()` only — default `DurabilityMode::Eventual`, no tuning;
+//!   * the shipping configuration — serializable isolation and
+//!     `transaction_keys_inline = 4096`, default `DurabilityMode::Eventual`;
 //!   * on-disk in a `tempfile::TempDir`, never `MemEnv`;
 //!   * prefill and database open happen outside every measured closure.
 //!
@@ -140,18 +141,37 @@ fn key(i: u64) -> Vec<u8> {
     format!("key:{i:012}").into_bytes()
 }
 
-/// `Options::default()`, on disk, no tuning. The `TempDir` is returned so the
+/// The configuration the Go lane ships, so the two are comparable.
+///
+/// `transaction_keys_inline` above the largest transaction in the suite: past
+/// this many keys the transaction write buffer indexes itself and clones the
+/// key on every later insert, which a transaction that only writes never reads
+/// back. Everything else is `Options::default()`, including
+/// `DurabilityMode::Eventual`.
+///
+/// This matters for honesty rather than for speed. Running this lane at the
+/// engine defaults while the Go lane is tuned made go-regolith appear to beat
+/// regolith-called-from-Rust on the transactional workloads, which is not a
+/// thing that can happen and made the boundary cost unreadable on those rows.
+fn shipping_options() -> Options {
+    Options {
+        transaction_keys_inline: 4096,
+        ..Options::default()
+    }
+}
+
+/// On disk, in the shipping configuration. The `TempDir` is returned so the
 /// caller keeps the directory alive for the database's whole life.
 fn open_db(tag: &str) -> (TempDir, Db) {
     let dir = TempDir::new().expect("create tempdir");
-    let db = Db::open(dir.path(), Options::default())
+    let db = Db::open(dir.path(), shipping_options())
         .unwrap_or_else(|e| panic!("open db for {tag}: {e}"));
     (dir, db)
 }
 
 fn open_txn_db(tag: &str) -> (TempDir, OptimisticTransactionDb) {
     let dir = TempDir::new().expect("create tempdir");
-    let db = OptimisticTransactionDb::open(dir.path(), Options::default())
+    let db = OptimisticTransactionDb::open(dir.path(), shipping_options())
         .unwrap_or_else(|e| panic!("open txn db for {tag}: {e}"));
     (dir, db)
 }
@@ -350,8 +370,11 @@ fn bench_scans(c: &mut Criterion, label: &str, db: &Db) {
 
 /// 9. `TxnWrite`, 10. `TxnReadWrite`, 11. `BatchWrite`.
 ///
-/// `OptimisticTransactionDb` + `IsolationLevel::SnapshotIsolation`, matching the
-/// store mode the FFI layer uses. Transactions run one at a time, so no commit
+/// `OptimisticTransactionDb` + `IsolationLevel::Serializable`, matching the
+/// configuration the Go store ships. Serializable costs nothing outside
+/// contention - measured within noise on every uncontended transactional
+/// workload - and it is what makes the badger comparison honest, since
+/// snapshot isolation admits write skew that badger's SSI rejects. Transactions run one at a time, so no commit
 /// can conflict; a conflict here would be a bug and is therefore fatal.
 ///
 /// Note on `BatchWrite`: the spec table defines it as a 1000-key transaction,
@@ -363,7 +386,7 @@ fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
     // Enough keys present that TxnReadWrite's gets are hits.
     prefill(db.db(), BATCH_WRITE_N, value);
 
-    let begin = || db.begin_transaction_with(IsolationLevel::SnapshotIsolation);
+    let begin = || db.begin_transaction_with(IsolationLevel::Serializable);
 
     let mut g = c.benchmark_group(format!("TxnWrite/{label}"));
     g.throughput(Throughput::Elements(TXN_WRITE_N));
