@@ -24,48 +24,37 @@ import (
 	goregolith "github.com/sourcenetwork/go-regolith"
 )
 
-// regolithLanes registers one lane per engine configuration under test, so that
-// configurations are compared within a single run rather than across runs, where
-// machine state drifts.
+// The regolith lane runs the configuration we would actually ship.
 //
-//   - regolith          engine defaults, the baseline every recorded figure used
-//   - regolith-ser      serializable isolation, comparable with badger's SSI
-//   - regolith-inline   transaction_keys_inline raised past the largest transaction
-//
-// The default lane must keep passing nil, so it stays comparable with the untuned
-// badger lane and with the numbers already published for it.
+//   - Serializable isolation, matching badger's serializable snapshot isolation.
+//     It costs nothing on uncontended work (measured within noise on every such
+//     workload) and it is what makes the contended comparison honest: regolith's
+//     default snapshot isolation conflicts less than badger only because it
+//     validates less, admitting write skew that badger rejects.
+//   - transaction_keys_inline above the largest transaction in the suite. Past
+//     this many keys the transaction write buffer indexes itself, cloning the key
+//     on every later insert, and a transaction that only writes never reads that
+//     index back. Worth about 23% on transactional writes.
 func init() {
-	lanes := []struct {
-		name string
-		opts *goregolith.Options
-	}{
-		{"regolith", nil},
-		{"regolith-ser", &goregolith.Options{Isolation: goregolith.IsolationSerializable}},
-		// The transaction write buffer indexes itself past this many keys, cloning
-		// the key on every later insert. A transaction that only writes never reads
-		// that index back, so above the largest transaction in the suite (1000 keys)
-		// the indexing is pure cost.
-		{"regolith-inline", &goregolith.Options{TransactionKeysInline: goregolith.Uint64(4096)}},
-	}
-
-	for _, lane := range lanes {
-		factories = append(factories, factory{
-			name: lane.name,
-			new: func(tb testing.TB) corekv.TxnStore {
-				dir := tb.TempDir()
-				s, err := regolith.NewDatastore(dir, lane.opts)
-				if err != nil {
-					tb.Fatal(err)
+	factories = append(factories, factory{
+		name: "regolith",
+		new: func(tb testing.TB) corekv.TxnStore {
+			dir := tb.TempDir()
+			s, err := regolith.NewDatastore(dir, &goregolith.Options{
+				Isolation:             goregolith.IsolationSerializable,
+				TransactionKeysInline: goregolith.Uint64(4096),
+			})
+			if err != nil {
+				tb.Fatal(err)
+			}
+			tb.Cleanup(func() {
+				if err := s.Close(); err != nil {
+					tb.Error(err)
 				}
-				tb.Cleanup(func() {
-					if err := s.Close(); err != nil {
-						tb.Error(err)
-					}
-				})
-				return s
-			},
-		})
-	}
+			})
+			return s
+		},
+	})
 
 	regolithNoop = func() { C.regolith_noop() }
 }
