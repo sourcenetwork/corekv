@@ -130,6 +130,72 @@ type Iterator interface {
 	Close() error
 }
 
+// ValueAppender is an optional interface implemented by some Iterators.
+//
+// It allows a caller to supply the buffer that the current value is written into, so
+// that a single buffer may be reused across an entire iteration instead of a new one
+// being allocated for every value.
+//
+// It is the interface to reach for if the caller needs to retain the value beyond the
+// current iteration step; if the value is consumed immediately, [ValueBorrower] avoids
+// the copy as well.
+//
+// Implementations that can hand out a value without allocating at all (for example by
+// returning a sub-slice of their own storage) have nothing to gain from this and are
+// not expected to implement it.  Callers should type-assert for it and fall back to
+// [Iterator.Value].
+type ValueAppender interface {
+	// AppendValue appends the value at the current iterator location to dst
+	// and returns the extended slice, following the convention of the
+	// stdlib's Append* functions.
+	//
+	// Note that this saves the allocation of the destination buffer, it does not
+	// save the copy - the value bytes are still copied into dst.
+	//
+	// If the iterator was created with the [IterOptions.KeysOnly] option, dst is
+	// returned unchanged and no error, mirroring [Iterator.Value].
+	//
+	// If the iterator is currently at an invalid location it's behaviour is undefined:
+	// https://github.com/sourcenetwork/corekv/issues/37
+	//
+	// The returned slice is only valid until the next call to AppendValue.
+	AppendValue(dst []byte) ([]byte, error)
+}
+
+// ValueBorrower is an optional interface implemented by some Iterators.
+//
+// It allows a caller to read the value at the current iterator location without the
+// store copying it, for stores that are able to expose the bytes that they already
+// hold.  It is the interface to reach for if the caller consumes the value immediately;
+// callers that need to retain it must copy it, and may find [ValueAppender] more
+// convenient.
+//
+// The lifetime of the borrowed bytes is bound lexically, by the callback, rather than
+// by a handle that the caller must remember to release.
+type ValueBorrower interface {
+	// BorrowValue calls fn with the value at the current iterator location.
+	//
+	// The slice passed to fn is only valid for the duration of the call, and must not
+	// be retained or mutated.  Callers that need the value afterwards must copy it, or
+	// use [Iterator.Value] instead.
+	//
+	// If the iterator was created with the [IterOptions.KeysOnly] option, fn is called
+	// with nil, mirroring [Iterator.Value] returning nil.  fn is always called exactly
+	// once unless an error prevents the value from being read.
+	//
+	// If the iterator is currently at an invalid location it's behaviour is undefined:
+	// https://github.com/sourcenetwork/corekv/issues/37
+	//
+	// Any error returned by fn is returned by BorrowValue unchanged and unwrapped -
+	// implementations must not add context to it.
+	//
+	// A caller therefore cannot tell a store-side failure from their own callback's
+	// failure by inspecting the returned error alone.  Callers that need to distinguish
+	// the two should use their own sentinel error, or record the failure in a variable
+	// captured by the closure.
+	BorrowValue(fn func(value []byte) error) error
+}
+
 // Dropable is an optional interface implemented by some Stores.
 //
 // It provides a convenient and cheap way of deleting all the data in an existing store.
