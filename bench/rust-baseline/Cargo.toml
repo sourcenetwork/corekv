@@ -20,3 +20,7 @@ harness = false
 
 [profile.bench]
 opt-level = 3
+
+[[bench]]
+name = "txncost"
+harness = false

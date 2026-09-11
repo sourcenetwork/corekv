@@ -25,7 +25,7 @@ cd bench/rust-baseline
 cargo bench
 ```
 
-Fast run, what `baseline-results.txt` was produced with:
+Fast smoke run (superseded by `baseline-results-full.txt`, see below):
 
 ```sh
 cargo bench -- --sample-size 10 --measurement-time 2 2>&1 | tee baseline-results.txt
@@ -113,29 +113,36 @@ What is pinned:
 
 ## Measured baseline
 
-`cargo bench -- --sample-size 10 --measurement-time 2`, darwin/arm64, rustc 1.95.0,
+`cargo bench` at criterion defaults (100 samples), darwin/arm64, rustc 1.95.0,
 regolith 0.1.4, `Options::default()`. Criterion median iteration time divided by
-the ops-per-iteration column. Full criterion output in `baseline-results.txt`.
+the ops-per-iteration column.
 
 | Workload | ops/iter | 64 B ns/op | 4 KiB ns/op |
 |---|---:|---:|---:|
-| `SeqWrite` | 10 000 | 3 963 | 8 873 |
-| `RandWrite` | 10 000 | 3 695 | 9 655 |
-| `GetHit` | 1 000 | 960 | 2 069 |
-| `GetMiss` | 1 000 | 174 | 245 |
-| `Has` | 1 000 | 793 | 1 228 |
-| `ScanAll` | 100 000 | 72 | 245 |
-| `ScanReverse` | 100 000 | 261 | 321 |
-| `ScanPrefix` | 1 000 | 87 | 102 |
-| `TxnWrite` | 100 | 1 293 | 5 714 |
-| `TxnReadWrite` | 20 | 809 | 3 481 |
-| `BatchWrite` | 1 000 | 1 357 | 6 854 |
-| `ParallelMixed` | 4 000 | 1 221 | 3 479 |
+| `SeqWrite` | 10 000 | 2 512 | 9 845 |
+| `RandWrite` | 10 000 | 3 533 | 12 137 |
+| `GetHit` | 1 000 | 890 | 1 480 |
+| `GetMiss` | 1 000 | 184 | 238 |
+| `Has` | 1 000 | 795 | 1 026 |
+| `ScanAll` | 100 000 | 73 | 280 |
+| `ScanReverse` | 100 000 | 265 | 354 |
+| `ScanPrefix` | 1 000 | 80 | 95 |
+| `TxnWrite` | 100 | 1 699 | 8 503 |
+| `TxnReadWrite` | 20 | 1 099 | 4 096 |
+| `BatchWrite` | 1 000 | 1 850 | 6 834 |
+| `ParallelMixed` | 4 000 | 1 057 | 2 061 |
 
 `ParallelMixed` is aggregate: wall time per iteration over all 4 000 ops across
 the 4 threads, which is what Go's `b.RunParallel` `ns/op` also reports.
 
-A 10-sample run has wide confidence intervals — `SeqWrite/64B` spans 31–50 ms.
-Re-run at criterion defaults before publishing a final comparison; these figures
-are for sanity-checking magnitudes and for the FFI delta, which is large enough
-to survive the noise.
+### Result files
+
+| File | What |
+|---|---|
+| `baseline-results-full.txt` | **Authoritative.** Full criterion run, 100 samples, all 24 benchmarks. |
+| `baseline-per-op.md` | The table above, derived from that run. |
+| `baseline-results.txt` | Superseded. Earlier smoke run at `--sample-size 10 --measurement-time 2`, kept for reference. |
+
+Magnitudes agree between the two runs; the quick run reads 20-60 % slow on the
+write and transaction workloads because ten samples do not outlast the first
+compaction. Use the full run for the lane comparison.
