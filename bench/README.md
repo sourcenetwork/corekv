@@ -43,9 +43,9 @@ BenchmarkTxnContendedHot8/badger/v64    # contention level in the workload name
 ```
 
 Workloads: `SeqWrite RandWrite GetHit GetMiss Has ScanAll ScanAllAppend ScanAllBorrow ScanReverse
-ScanPrefix TxnWrite TxnReadWrite BatchWrite ParallelMixed` — one top-level `Benchmark*` per row of
-the spec table — plus `TxnContendedHot8` and `TxnContendedHot4096`, which are not in the spec table
-(see "Contended transactions" below).
+ScanPrefix TxnWrite TxnReadWrite BatchWrite BatchWriteNative ParallelMixed` - one top-level
+`Benchmark*` per row of the spec table - plus `TxnContendedHot8` and `TxnContendedHot4096`, which
+are not in the spec table (see "Contended transactions" below).
 
 `ScanAllAppend` and `ScanAllBorrow` are `ScanAll` reading each value through the optional
 `corekv.ValueAppender` / `corekv.ValueBorrower` interfaces, falling back to `Value` for
@@ -53,6 +53,13 @@ iterators that do not implement them. They share `ScanAll`'s `opsPerIter`, so th
 directly comparable: `ScanAll` allocates a buffer and copies into it, `ScanAllAppend` copies into
 a re-used buffer, `ScanAllBorrow` does neither. They have no Rust counterpart — they measure a
 property of the Go interface, not of the engine — and so are outside the fidelity comparison.
+
+`BatchWriteNative` is `BatchWrite`'s 1000 keys applied through the optional
+`corekv.BatchWriter` interface instead of a transaction: one write, no snapshot,
+no conflict detection. Lanes whose store does not implement it are **skipped**,
+not silently run as a transaction, so a missing number means "no capability" and
+never "no difference". It has a Rust counterpart and is inside the fidelity
+comparison.
 
 ## Reading the output
 
@@ -64,6 +71,31 @@ Every benchmark therefore also reports:
 ns/op-key   elapsed / (b.N * opsPerIter)   <- compare the lanes on this
 B/s         via b.SetBytes, where values actually move
 ```
+
+**Which statistic each lane reports.** The Go lanes report an arithmetic mean: `go test`
+divides the elapsed time of one measurement by the iterations it ran, and `ns/op-key`
+divides again by `opsPerIter`. `run.sh` uses `-count 5`, which produces five independent
+means; compare them with `benchstat`, which reports a median across runs and a
+confidence interval. The Rust lane is criterion, which reports the **median** of its
+per-iteration samples, plus its own interval. A mean and a median are not the same
+estimator, so a small gap between the columns is not a result.
+
+**`go-rego` minus `rust` is not a measurement of the FFI boundary.** The two lanes
+differ in more than the crossing: different statistic (above), different allocator and
+garbage collector, criterion's sampling against `testing`'s iteration ramp, and work the
+Go adapter does besides crossing (copies, error mapping, interface dispatch). Both build
+the engine with the same Rust profile from this branch on (`rust-baseline/Cargo.toml`
+now matches go-regolith's `ffi/Cargo.toml`), which removes one of those differences but
+not the rest. `BenchmarkFFINoop` is the bare crossing cost: a cgo call into a C function
+that does nothing. Use that as the floor, and read the rest of the gap as "the Go lane
+does more work", not as "the boundary costs this much".
+
+The Rust lane builds with `lto = true` and `codegen-units = 1`
+(`rust-baseline/Cargo.toml`, `[profile.bench]`), matching the profile the staticlib the
+Go lane links is built with. Before this branch it built at `opt-level = 3` only, which
+meant the Rust column was compiled without cross-crate LTO while the Go column's engine
+was. Numbers measured before this change are not comparable with numbers measured after
+it.
 
 ## Ops per iteration
 
@@ -77,6 +109,7 @@ The `ns/op-key` divisor, which must stay equal to the Rust baseline's `Throughpu
 | GetMiss | 1000 | TxnWrite | 100 |
 | Has | 1000 | TxnReadWrite | 20 |
 | BatchWrite | 1000 | ParallelMixed | 4000 |
+| BatchWriteNative | 1000 | | |
 | TxnContendedHot8 | 800 | TxnContendedHot4096 | 800 |
 | ScanAllAppend | 100000 | ScanAllBorrow | 100000 |
 
@@ -139,10 +172,11 @@ other invalidates the comparison. Shared by construction:
   `t*len(order)/4`. It deliberately does **not** use `b.RunParallel`: that fixes the goroutine count
   at `p*GOMAXPROCS` and splits `b.N` across it, which cannot express "4 threads of exactly 1000 ops"
   on an 8-CPU machine. Four explicit goroutines per iteration match the Rust `thread::scope` shape.
-- `BatchWrite` is a 1000-key transaction, not a native batch primitive - corekv's `TxnStore` has no
-  batch API, so a native `WriteBatch` number would have no Go counterpart.
-- The transactional workloads (`TxnWrite`, `TxnReadWrite`, `BatchWrite`) run against a store
-  prefilled with 1000 keys, as the Rust lane's transactional fixture is.
+- `BatchWrite` stays a 1000-key transaction, kept that way for continuity with every run
+  that came before it. `BatchWriteNative` is the batch: the same 1000 keys through
+  `corekv.BatchWriter` instead.
+- The transactional workloads (`TxnWrite`, `TxnReadWrite`, `BatchWrite`, `BatchWriteNative`) run
+  against a store prefilled with 1000 keys, as the Rust lane's transactional fixture is.
 
 `fidelity_test.go` pins this: it asserts the permutation against golden values produced by
 compiling the Rust `Rng`/`shuffled()` verbatim, and asserts the key format and the prefix's match
@@ -173,6 +207,9 @@ Known, deliberate divergences:
   leave the benchmark running with a worker silently missing.
 - badger runs **on disk** in a temp dir (regolith is a disk engine; in-memory badger would not be
   a fair comparison) with `badger.DefaultOptions`. No engine's knobs are tuned, in either lane.
+- Prefill never flushes, in any lane or engine. go-regolith exposes no flush and badger has no
+  public memtable flush, so a lane that flushed would start from a state the others cannot reach.
+  Every lane starts a measurement with whatever the engine chose to keep in memory.
 
 ## Adding the regolith lane
 

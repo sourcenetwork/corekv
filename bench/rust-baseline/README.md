@@ -1,16 +1,14 @@
 # `regolith-baseline` — the native Rust lane
 
-This crate is lane `rust` of the corekv FFI-overhead benchmark. It runs the twelve
+This crate is lane `rust` of the corekv FFI-overhead benchmark. It runs the thirteen
 workloads from `PLAN-regolith.md`'s spec table against [`regolith`](https://crates.io/crates/regolith)
-`0.1.4` directly — no C ABI, no cgo, no marshalling, no Go.
+`0.1.4` directly - no C ABI, no cgo, no marshalling, no Go.
 
-Its numbers are the **denominator**. The two Go lanes (`go-ffi`, `badger`) run the
-same workloads through `corekv`:
-
-```
-go-ffi  -  rust    =  FFI + marshalling + copy cost
-go-ffi  vs badger  =  the actual decision
-```
+The two Go lanes (`go-ffi`, `badger`) run the same workloads through `corekv`. `go-ffi`
+minus `rust` is **not** a measurement of the FFI boundary by itself: the two harnesses
+report different statistics, build the engine with different profiles, and the Go
+adapter does work besides crossing. See `../README.md` ("Reading the output") for the
+full explanation and for `BenchmarkFFINoop`, the bare crossing cost.
 
 It is a standalone crate with its own `Cargo.lock` and an empty `[workspace]`
 table, so it is never pulled into a parent workspace.
@@ -39,6 +37,13 @@ cargo bench -- 'GetHit/64B'
 
 Criterion writes HTML reports and raw samples to `target/criterion/`.
 
+**Build profile.** `[profile.bench]` sets `lto = true` and `codegen-units = 1`,
+matching the profile go-regolith's `ffi/Cargo.toml` builds the staticlib the Go
+lane links with. Without it this crate compiles regolith with thin-local LTO
+across 16 codegen units while the Go column's copy of the same engine gets fat
+LTO and one unit, which handicaps this lane for a reason that has nothing to do
+with the engine being measured.
+
 ## Reading the numbers
 
 Criterion reports **time per iteration**, and an iteration is not one store
@@ -54,6 +59,7 @@ number of store operations in one iteration:
 | `TxnWrite` | 100 puts (+ 1 commit) |
 | `TxnReadWrite` | 20 ops — 10 gets + 10 puts (+ 1 commit) |
 | `BatchWrite` | 1 000 puts (+ 1 commit) |
+| `BatchWriteNative` | 1 000 puts in one WriteBatch |
 | `ParallelMixed` | 4 000 — 4 threads × 1 000 ops, 90 % get / 10 % put |
 
 So:
@@ -83,17 +89,19 @@ What is pinned:
   42 and a descending Fisher-Yates shuffle. Both are written out in full, with
   the Go translation, in the doc comments on `Rng` and `shuffled()` in
   `benches/workloads.rs`. **The Go lane must copy that code verbatim.**
-* **Options.** `Options::default()` and nothing else. Default
-  `DurabilityMode::Eventual` — no fsync per write, which is also badger's
-  default. Neither engine is tuned.
+* **Options.** `shipping_options()`: `transaction_keys_inline = 4096`, everything
+  else `Options::default()`, including `DurabilityMode::Eventual` (no fsync per
+  write, which is badger's default too). The Go regolith lane opens with the
+  same two settings (`bench/stores_regolith.go`).
 * **Storage.** On disk, in a `tempfile::TempDir`. Not `MemEnv`; the badger lane
   is on disk, so this is too.
-* **Transactions.** `OptimisticTransactionDb` with
-  `IsolationLevel::SnapshotIsolation`, which is what the FFI layer uses.
+* **Transactions.** `OptimisticTransactionDb` with `IsolationLevel::Serializable`,
+  matching what the Go lane ships and what badger's SSI validates.
 * **Iteration.** `Snapshot::owned_iter()`, the cursor the FFI layer exposes —
   not the borrowing `Snapshot::iter()`. Reverse is `seek_to_last` + `prev`.
-* **Prefill is never measured.** Databases are opened and filled (batched, then
-  flushed) outside every measured closure.
+* **Prefill is never measured.** Databases are opened and filled (batched, never
+  flushed) outside every measured closure. Neither Go lane can flush: go-regolith
+  exposes no flush and badger has no public memtable flush.
 * **Errors are fatal.** Every call `.expect(...)`s. `GetMiss` asserts it got
   `None`; `GetHit`/`Has` assert they got a hit; the scans assert their exact key
   counts. A workload that silently measured the wrong thing would abort instead.
@@ -104,14 +112,24 @@ What is pinned:
   same 10 000 keys, because that is what a Go `b.N` loop over a fixed key set
   does. After the first iteration the engine is handling overwrites, on both
   sides equally.
-* `BatchWrite` is a 1000-key **transaction**, not `Db::write(WriteBatch)`.
-  corekv's `TxnStore` has no batch primitive, so a native `WriteBatch` number
-  would have no Go counterpart to be compared with.
+* `BatchWrite` stays a 1000-key **transaction**, kept that way for continuity
+  with every run that came before it.
+* `BatchWriteNative` is the same 1000 keys through `Db::write(WriteBatch)`
+  instead. `Db::write` consumes the batch, so this row rebuilds it inside the
+  measurement, which the Go row's pooled-buffer adapter does not; the two are
+  not identical in that one respect.
 * Point-read workloads walk their shuffled permutation with a wrapping cursor
   across iterations, so all 100 000 keys get touched rather than only the first
   1 000 — otherwise the measurement would be of a cache-resident hot set.
 
 ## Measured baseline
+
+These numbers were measured before this branch: at `[profile.bench] opt-level = 3`
+with no cross-crate LTO, with keys formatted inside the timed closure on seven
+rows, and with a flushing prefill. They are kept as a record of that
+configuration. They are not comparable with a run of the harness as it stands
+now, and there is no `BatchWriteNative` row because the row did not exist.
+Re-measuring the whole table is a separate run.
 
 `cargo bench` at criterion defaults (100 samples), darwin/arm64, rustc 1.95.0,
 regolith 0.1.4, `Options::default()`. Criterion median iteration time divided by
