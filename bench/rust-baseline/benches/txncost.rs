@@ -1,6 +1,6 @@
 //! Where does regolith's transactional write cost go?
 //!
-//! This file is a diagnosis harness, not part of the twelve-workload spec in
+//! This file is a diagnosis harness, not part of the thirteen-workload spec in
 //! `workloads.rs`, and it is not compared against the Go lanes. Every number is
 //! compared against another number measured in this same file, on this machine,
 //! in the same run.
@@ -83,8 +83,10 @@ impl Lane {
             Lane::Disk => Options::default(),
             // `max_background_compactions: 0` is not a tuning choice: `MemEnv`
             // cannot spawn threads, and `Db::open` rejects any other value for
-            // it. Everything else is `Options::default()`, notably the 64 MiB
-            // `write_buffer_size`, so a flush is rare in both lanes.
+            // it. `write_buffer_size` is raised to 1 GiB below so that this lane
+            // never flushes mid-measurement, which would put a memcpy of the
+            // whole memtable inside one unlucky sample. Everything else is
+            // `Options::default()`.
             Lane::Mem => Options {
                 env: Arc::new(MemEnv::default()),
                 max_background_compactions: 0,
@@ -237,8 +239,12 @@ fn bench_batch(c: &mut Criterion, lane: Lane, label: &str, value: &[u8], n: u64)
 // 1. The split: begin/rollback frame, put phase, commit phase.
 // ---------------------------------------------------------------------------
 
-/// One `n`-key optimistic `SnapshotIsolation` transaction — the exact
-/// configuration `TxnWrite` in `workloads.rs` uses — taken apart:
+/// One `n`-key optimistic `SnapshotIsolation` transaction at the default
+/// `transaction_keys_inline` (32), taken apart.
+///
+/// This is not the configuration `TxnWrite` in `workloads.rs` runs: that one is
+/// `Serializable` at `transaction_keys_inline` 4096. The rows in this group are
+/// comparable with each other, never with `workloads.rs`.
 ///
 ///   * `whole` — begin + n puts + commit. Reproduces `TxnWrite`.
 ///   * `put-phase` — begin + n puts + rollback. Buffering only, no engine write.

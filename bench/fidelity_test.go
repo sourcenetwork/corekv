@@ -75,3 +75,30 @@ func TestKeyFormat(t *testing.T) {
 		t.Errorf("scanPrefix %q matches %d keys, want %d", scanPrefix, n, scanPrefixN)
 	}
 }
+
+// TestBatchWriteNativeMirrorsBatchWrite pins the new row to the row it is read against.
+// The two are only comparable if they touch the same keys, the same number of times,
+// against the same fixture, so a divergence here silently invalidates the pair.
+func TestBatchWriteNativeMirrorsBatchWrite(t *testing.T) {
+	native, ok := lookupWorkload("BatchWriteNative")
+	if !ok {
+		t.Fatal("BatchWriteNative workload is not registered")
+	}
+	txn, ok := lookupWorkload("BatchWrite")
+	if !ok {
+		t.Fatal("BatchWrite workload is not registered")
+	}
+
+	if native.opsPerIter != txn.opsPerIter {
+		t.Errorf("opsPerIter = %d, want %d (BatchWrite's)", native.opsPerIter, txn.opsPerIter)
+	}
+	if native.prefillN != txn.prefillN {
+		t.Errorf("prefillN = %d, want %d (BatchWrite's)", native.prefillN, txn.prefillN)
+	}
+	if native.readOnly {
+		t.Error("BatchWriteNative is marked readOnly; it writes")
+	}
+	if !native.movesValues {
+		t.Error("BatchWriteNative does not report bytes; it moves values")
+	}
+}
