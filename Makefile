@@ -133,11 +133,55 @@ test\:level:
 	@$(MAKE) clean
 	CORE_KV_MULTIPLIERS="namespace,chunk,level,txn-discard" sh -c 'cd ./test && go test ./...'
 
+.PHONY: test\:regolith
+test\:regolith:
+# The regolith store links the Rust staticlib owned by go-regolith, which the
+# whole test module then depends on, so it must be built before any test binary
+# in it can be linked.
+	@$(MAKE) -C ../go-regolith ffi
+# Environment variable changes do not invalidate the go test cache, so it is important
+# for us to clean between each run.
+	@$(MAKE) clean
+	(cd ./regolith && go test -tags regolith ./...)
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,regolith" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,txn-commit" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,txn-commit,txn-context" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,regolith,txn-commit" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,txn-discard" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,txn-discard,txn-context" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,regolith,txn-discard" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,txn-multi" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,regolith,txn-multi" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="chunk,regolith" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,regolith" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,chunk,txn-commit" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,regolith,txn-commit" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="regolith,chunk,txn-discard" sh -c 'cd ./test && go test -tags regolith ./...'
+	@$(MAKE) clean
+	CORE_KV_MULTIPLIERS="namespace,chunk,regolith,txn-discard" sh -c 'cd ./test && go test -tags regolith ./...'
+
 .PHONY: test\:all
 test\:all:
 	@$(MAKE) test:memory
 	@$(MAKE) test:badger
 	@$(MAKE) test:level
+	@$(MAKE) test:regolith
 
 .PHONY: test\:ci
 test\:ci:
@@ -161,5 +205,8 @@ tidy:
 	(cd ./blockstore && go mod tidy)
 	(cd ./chunk && go mod tidy)
 	(cd ./leveldb && go mod tidy)
-	(cd ./test && go mod tidy)
+	(cd ./regolith && go mod tidy)
+# The regolith store is behind the `regolith` build tag, so the tag must be
+# enabled here or tidy would drop its require/replace from test/go.mod.
+	GOFLAGS=-tags=regolith sh -c 'cd ./test && go mod tidy'
 	go mod tidy

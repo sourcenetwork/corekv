@@ -1,0 +1,7 @@
+# Benchmark output is machine-specific; results belong in a report, not in git.
+results-*.txt
+results-summary.md
+txn-verify*.txt
+rust-baseline/baseline-results*.txt
+rust-baseline/baseline-per-op.md
+rust-baseline/target/

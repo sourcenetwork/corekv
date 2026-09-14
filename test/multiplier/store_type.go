@@ -8,6 +8,7 @@ func init() {
 	Register(&badger{})
 	Register(&memory{})
 	Register(&level{})
+	registerRegolith()
 }
 
 const Badger Name = "badger"
@@ -89,6 +90,35 @@ func (n *level) Apply(source action.Actions) action.Actions {
 		_, ok := sourceAction.(*action.NewStore)
 		if ok {
 			result[i] = &action.NewLevelStore{}
+		} else {
+			result[i] = sourceAction
+		}
+	}
+
+	return result
+}
+
+const Regolith Name = "regolith"
+
+// regolith represents the regolith store complexity multiplier.
+//
+// Applying the multiplier will replace all [action.NewStore] actions
+// with [action.NewRegolithStore] instances.
+type regolith struct{}
+
+var _ Multiplier = (*regolith)(nil)
+
+func (n *regolith) Name() Name {
+	return Regolith
+}
+
+func (n *regolith) Apply(source action.Actions) action.Actions {
+	result := make([]action.Action, len(source))
+
+	for i, sourceAction := range source {
+		_, ok := sourceAction.(*action.NewStore)
+		if ok {
+			result[i] = &action.NewRegolithStore{}
 		} else {
 			result[i] = sourceAction
 		}

@@ -110,6 +110,12 @@ type namespaceIterator struct {
 	it        corekv.Iterator
 }
 
+var (
+	_ corekv.Iterator      = (*namespaceIterator)(nil)
+	_ corekv.ValueAppender = (*namespaceIterator)(nil)
+	_ corekv.ValueBorrower = (*namespaceIterator)(nil)
+)
+
 func (nIter *namespaceIterator) Reset() {
 	nIter.it.Reset()
 }
@@ -125,6 +131,52 @@ func (nIter *namespaceIterator) Key() []byte {
 
 func (nIter *namespaceIterator) Value() ([]byte, error) {
 	return nIter.it.Value()
+}
+
+// AppendValue implements [corekv.ValueAppender].
+//
+// Namespacing rewrites keys only, values pass through it untouched, so this forwards
+// to the underlying iterator where it implements the interface, and falls back to
+// `Value` where it does not.  The fallback keeps the wrapper correct over any
+// underlying store, at the cost of it being no faster than `Value` for those stores.
+//
+// Note that because the method is always defined, a namespaced iterator always
+// satisfies [corekv.ValueAppender], even when the store beneath it has nothing to gain
+// from it - a caller's type assertion will succeed, it just may not save them an
+// allocation.  Correctness over any underlying store is preferred here over preserving
+// that (fairly weak) signal.
+func (nIter *namespaceIterator) AppendValue(dst []byte) ([]byte, error) {
+	if appender, ok := nIter.it.(corekv.ValueAppender); ok {
+		return appender.AppendValue(dst)
+	}
+
+	value, err := nIter.it.Value()
+	if err != nil {
+		return nil, err
+	}
+
+	return append(dst, value...), nil
+}
+
+// BorrowValue implements [corekv.ValueBorrower].
+//
+// Like `AppendValue` it forwards to the underlying iterator where it implements the
+// interface, and falls back to `Value` where it does not.  Falling back yields a slice
+// that outlives `fn`, which is permitted - the contract bounds how long the caller may
+// use the bytes for, not how long they remain valid.
+//
+// Any error returned by `fn` is returned unchanged on both paths.
+func (nIter *namespaceIterator) BorrowValue(fn func(value []byte) error) error {
+	if borrower, ok := nIter.it.(corekv.ValueBorrower); ok {
+		return borrower.BorrowValue(fn)
+	}
+
+	value, err := nIter.it.Value()
+	if err != nil {
+		return err
+	}
+
+	return fn(value)
 }
 
 func (nIter *namespaceIterator) Seek(key []byte) (bool, error) {

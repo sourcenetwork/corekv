@@ -240,7 +240,11 @@ type iterator struct {
 	currentChunkKey []byte
 }
 
-var _ corekv.Iterator = (*iterator)(nil)
+var (
+	_ corekv.Iterator      = (*iterator)(nil)
+	_ corekv.ValueAppender = (*iterator)(nil)
+	_ corekv.ValueBorrower = (*iterator)(nil)
+)
 
 func (it *iterator) Reset() {
 	it.currentKey = nil
@@ -300,6 +304,28 @@ func (it *iterator) Key() []byte {
 
 func (it *iterator) Value() ([]byte, error) {
 	return it.currentValue, nil
+}
+
+// AppendValue implements [corekv.ValueAppender].
+//
+// `Next` and `Seek` have already joined the underlying chunks into `currentValue`, so
+// this is a single copy out of that buffer, with no allocation beyond any growth of
+// `dst`.
+func (it *iterator) AppendValue(dst []byte) ([]byte, error) {
+	return append(dst, it.currentValue...), nil
+}
+
+// BorrowValue implements [corekv.ValueBorrower], handing the iterator's own reassembly
+// buffer to `fn` without copying it.
+//
+// `currentValue` is only ever replaced wholesale by `Next` and `Seek` (by the
+// `bytes.Join` of the chunks), never mutated in place, so it is stable for the whole of
+// the current iteration step - comfortably longer than the duration of the call that the
+// contract requires.
+//
+// Any error returned by `fn` is returned unchanged.
+func (it *iterator) BorrowValue(fn func(value []byte) error) error {
+	return fn(it.currentValue)
 }
 
 func (it *iterator) Seek(key []byte) (bool, error) {

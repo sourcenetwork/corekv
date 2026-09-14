@@ -68,3 +68,11 @@ func (a *NewLevelStore) Execute(s *state.State) {
 	s.Rootstore = store
 	s.Store = store
 }
+
+// NewRegolithStore action will create a new regolith [corekv.Store] when executed.
+//
+// The regolith store links a Rust staticlib via cgo, so its `Execute` implementation
+// lives in the build-tagged `new_regolith.go`/`new_regolith_stub.go` pair.
+type NewRegolithStore struct{}
+
+var _ Action = (*NewRegolithStore)(nil)
