@@ -9,7 +9,8 @@
 // FIDELITY: this file mirrors rust-baseline/benches/workloads.rs. The PRNG, the shuffle,
 // the key formats, the per-iteration operation counts and the value bytes are all
 // reproduced bit-for-bit. Do not change one side without the other. The spec table lives
-// in ../PLAN-regolith.md.
+// in ../PLAN-regolith.md. ScanAllAppend, ScanAllBorrow and the TxnContended* workloads
+// have no Rust counterpart and are outside this contract; BatchWriteNative does have one.
 package bench
 
 import (
@@ -51,12 +52,14 @@ const (
 	txnRWN = 10
 
 	// batchWriteN is the number of `Set`s in one BatchWrite transaction
-	// (BATCH_WRITE_N). It is also the prefill size of the transactional fixture, so
-	// that TxnReadWrite's reads are hits.
+	// (BATCH_WRITE_N). It is also the number of operations in one BatchWriteNative
+	// batch, and the prefill size of the transactional fixture, so that
+	// TxnReadWrite's reads are hits.
 	//
-	// Note: "BatchWrite" is deliberately a 1000-key transaction rather than a native
-	// batch primitive - corekv's TxnStore exposes no batch API, so a native
-	// WriteBatch number would have no Go counterpart.
+	// Note: "BatchWrite" is a 1000-key transaction, not a batch. It keeps that shape
+	// so the row stays comparable with every run that came before it; BatchWriteNative
+	// is the same 1000 keys through [corekv.BatchWriter], and the pair is the cost of
+	// the transaction machinery on this workload.
 	batchWriteN = 1_000
 
 	// parallelThreads / parallelOpsPerThread: ParallelMixed is exactly 4 goroutines of
@@ -375,8 +378,8 @@ var workloads = []workload{
 			ctx := context.Background()
 			for i := 0; i < b.N; i++ {
 				txn := s.NewTxn(false)
-				for j := uint64(0); j < txnWriteN; j++ {
-					if err := txn.Set(ctx, key(j), val); err != nil {
+				for j := 0; j < txnWriteN; j++ {
+					if err := txn.Set(ctx, presentKeys[j], val); err != nil {
 						txn.Discard()
 						b.Fatal(err)
 					}
@@ -394,16 +397,16 @@ var workloads = []workload{
 			ctx := context.Background()
 			for i := 0; i < b.N; i++ {
 				txn := s.NewTxn(false)
-				for j := uint64(0); j < txnRWN; j++ {
-					v, err := txn.Get(ctx, key(j))
+				for j := 0; j < txnRWN; j++ {
+					v, err := txn.Get(ctx, presentKeys[j])
 					if err != nil {
 						txn.Discard()
 						b.Fatal(err)
 					}
 					sink += len(v)
 				}
-				for j := uint64(0); j < txnRWN; j++ {
-					if err := txn.Set(ctx, key(j), val); err != nil {
+				for j := 0; j < txnRWN; j++ {
+					if err := txn.Set(ctx, presentKeys[j], val); err != nil {
 						txn.Discard()
 						b.Fatal(err)
 					}
@@ -421,14 +424,43 @@ var workloads = []workload{
 			ctx := context.Background()
 			for i := 0; i < b.N; i++ {
 				txn := s.NewTxn(false)
-				for j := uint64(0); j < batchWriteN; j++ {
-					if err := txn.Set(ctx, key(j), val); err != nil {
+				for j := 0; j < batchWriteN; j++ {
+					if err := txn.Set(ctx, presentKeys[j], val); err != nil {
 						txn.Discard()
 						b.Fatal(err)
 					}
 				}
 				if err := txn.Commit(); err != nil {
 					txn.Discard()
+					b.Fatal(err)
+				}
+			}
+		},
+	},
+	{
+		// The same 1000 keys as BatchWrite, through [corekv.BatchWriter] rather than a
+		// transaction: one write, no snapshot, no conflict detection. Lanes whose
+		// store does not implement the optional interface skip, rather than falling
+		// back to a transaction, which would silently re-measure BatchWrite.
+		name: "BatchWriteNative", prefillN: batchWriteN, opsPerIter: batchWriteN, movesValues: true,
+		run: func(b *testing.B, s corekv.TxnStore, val []byte) {
+			writer, ok := s.(corekv.BatchWriter)
+			if !ok {
+				b.Skip("store does not implement corekv.BatchWriter")
+			}
+
+			// Building the operation set is setup, not work: the keys and the value are
+			// fixed for the whole run, so a caller would build it once too.
+			b.StopTimer()
+			ctx := context.Background()
+			ops := make([]corekv.BatchOp, batchWriteN)
+			for j := range ops {
+				ops[j] = corekv.BatchOp{Key: presentKeys[j], Value: val}
+			}
+			b.StartTimer()
+
+			for i := 0; i < b.N; i++ {
+				if err := writer.WriteBatch(ctx, ops); err != nil {
 					b.Fatal(err)
 				}
 			}

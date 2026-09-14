@@ -1,8 +1,12 @@
 //! Native Rust baseline for the corekv/regolith FFI-overhead benchmark.
 //!
-//! These are the same twelve workloads the Go lanes (`go-ffi` and `badger`) run,
+//! These are the same thirteen workloads the Go lanes (`go-ffi` and `badger`) run,
 //! executed against regolith directly with no FFI, no cgo and no marshalling.
-//! The numbers here are the floor: `go-ffi - rust` is the cost of the boundary.
+//! The numbers here are the native floor for the same work. The gap to a Go lane is
+//! not a measurement of the FFI boundary: the two harnesses report different
+//! statistics, build the engine with different profiles, and the Go lane does work in
+//! the adapter besides crossing. `BenchmarkFFINoop` in the Go harness is the bare
+//! crossing cost.
 //!
 //! Fidelity rules (do not change one side without the other):
 //!   * keys are `format!("key:{i:012}")` — 16 bytes, identical to Go's
@@ -177,6 +181,11 @@ fn open_txn_db(tag: &str) -> (TempDir, OptimisticTransactionDb) {
 }
 
 /// Write `key:0 .. key:n` with `value`, batched for speed. Never measured.
+///
+/// The prefill deliberately does not flush. Neither Go lane can: go-regolith's `DB`
+/// exposes no flush, and badger has no public memtable flush, so flushing here would
+/// hand this lane a state the others cannot reach. Every lane therefore starts a
+/// measurement with whatever the engine chose to keep in memory.
 fn prefill(db: &Db, n: u64, value: &[u8]) {
     let mut batch = WriteBatch::new();
     for i in 0..n {
@@ -189,7 +198,6 @@ fn prefill(db: &Db, n: u64, value: &[u8]) {
     if !batch.is_empty() {
         db.write(batch).expect("prefill tail write");
     }
-    db.flush().expect("prefill flush");
 }
 
 /// A cursor that walks a fixed permutation, wrapping — the Rust analogue of the
@@ -249,7 +257,13 @@ fn bench_writes(c: &mut Criterion, label: &str, value: &[u8]) {
 ///
 /// `GetMiss` asks for `key:1000000xxxxxx`, which the prefill never wrote, and
 /// asserts the answer is `None` so a silent hit cannot masquerade as a miss.
+///
+/// Keys are precomputed outside the measured closures: `format!` is not part of
+/// what these workloads measure.
 fn bench_points(c: &mut Criterion, label: &str, db: &Db) {
+    let keys: Vec<Vec<u8>> = (0..PREFILL_N).map(key).collect();
+    let miss_keys: Vec<Vec<u8>> = (0..PREFILL_N).map(|i| key(1_000_000 + i)).collect();
+
     let hit = Cursor::new(shuffled(PREFILL_N));
     let miss = Cursor::new(shuffled(PREFILL_N));
     let has = Cursor::new(shuffled(PREFILL_N));
@@ -259,8 +273,8 @@ fn bench_points(c: &mut Criterion, label: &str, db: &Db) {
     g.bench_function("get", |b| {
         b.iter(|| {
             for _ in 0..POINT_OPS {
-                let k = key(hit.next());
-                let v = db.get(&k).expect("get hit");
+                let k = &keys[hit.next() as usize];
+                let v = db.get(k).expect("get hit");
                 assert!(v.is_some(), "GetHit missed a prefilled key");
                 black_box(v);
             }
@@ -273,8 +287,8 @@ fn bench_points(c: &mut Criterion, label: &str, db: &Db) {
     g.bench_function("get", |b| {
         b.iter(|| {
             for _ in 0..POINT_OPS {
-                let k = key(1_000_000 + miss.next());
-                let v = db.get(&k).expect("get miss");
+                let k = &miss_keys[miss.next() as usize];
+                let v = db.get(k).expect("get miss");
                 assert!(v.is_none(), "GetMiss found a key that was never written");
                 black_box(v);
             }
@@ -287,8 +301,8 @@ fn bench_points(c: &mut Criterion, label: &str, db: &Db) {
     g.bench_function("has", |b| {
         b.iter(|| {
             for _ in 0..POINT_OPS {
-                let k = key(has.next());
-                let present = db.has(&k).expect("has");
+                let k = &keys[has.next() as usize];
+                let present = db.has(k).expect("has");
                 assert!(present, "Has missed a prefilled key");
                 black_box(present);
             }
@@ -377,14 +391,19 @@ fn bench_scans(c: &mut Criterion, label: &str, db: &Db) {
 /// snapshot isolation admits write skew that badger's SSI rejects. Transactions run one at a time, so no commit
 /// can conflict; a conflict here would be a bug and is therefore fatal.
 ///
+/// Keys are precomputed outside the measured closures: `format!` is not part of
+/// what these workloads measure.
+///
 /// Note on `BatchWrite`: the spec table defines it as a 1000-key transaction,
-/// not as `Db::write(WriteBatch)`. corekv's `TxnStore` has no batch primitive,
-/// so a native `WriteBatch` measurement would have nothing to compare against.
-/// Kept as a transaction for that reason.
+/// kept that way for continuity with every run that came before it.
+/// `bench_batch_native`, below, is the same 1000 keys through
+/// `Db::write(WriteBatch)` instead of a transaction.
 fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
     let (_dir, db) = open_txn_db("txn");
     // Enough keys present that TxnReadWrite's gets are hits.
     prefill(db.db(), BATCH_WRITE_N, value);
+
+    let ks: Vec<Vec<u8>> = (0..BATCH_WRITE_N).map(key).collect();
 
     let begin = || db.begin_transaction_with(IsolationLevel::Serializable);
 
@@ -393,8 +412,8 @@ fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
     g.bench_function("txn", |b| {
         b.iter(|| {
             let txn = begin();
-            for i in 0..TXN_WRITE_N {
-                txn.put(&key(i), value).expect("txn put");
+            for k in &ks[..TXN_WRITE_N as usize] {
+                txn.put(k, value).expect("txn put");
             }
             txn.commit().expect("txn commit");
         })
@@ -407,13 +426,13 @@ fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
     g.bench_function("txn", |b| {
         b.iter(|| {
             let txn = begin();
-            for i in 0..TXN_RW_N {
-                let v = txn.get(&key(i)).expect("txn get");
+            for k in &ks[..TXN_RW_N as usize] {
+                let v = txn.get(k).expect("txn get");
                 assert!(v.is_some(), "TxnReadWrite missed a prefilled key");
                 black_box(v);
             }
-            for i in 0..TXN_RW_N {
-                txn.put(&key(i), value).expect("txn put");
+            for k in &ks[..TXN_RW_N as usize] {
+                txn.put(k, value).expect("txn put");
             }
             txn.commit().expect("txn commit");
         })
@@ -425,10 +444,39 @@ fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
     g.bench_function("txn", |b| {
         b.iter(|| {
             let txn = begin();
-            for i in 0..BATCH_WRITE_N {
-                txn.put(&key(i), value).expect("txn put");
+            for k in &ks[..BATCH_WRITE_N as usize] {
+                txn.put(k, value).expect("txn put");
             }
             txn.commit().expect("txn commit");
+        })
+    });
+    g.finish();
+}
+
+/// 13. `BatchWriteNative` - the same 1000 keys as `BatchWrite`, through `Db::write(WriteBatch)` instead of a transaction.
+///
+/// `Db::write` consumes the batch, so the batch is rebuilt inside the measurement; the
+/// Go lane's adapter refills one buffer instead, because go-regolith's `Write` leaves
+/// the batch intact. The Rust row therefore also pays the per-operation allocations
+/// `WriteBatch::put` makes, which the Go row does not. `txncost.rs`'s
+/// `BatchWriteDirect` group splits `build+write` from `write-only` and is where that
+/// difference is sized; do not read the split out of this row.
+fn bench_batch_native(c: &mut Criterion, label: &str, value: &[u8]) {
+    let ks: Vec<Vec<u8>> = (0..BATCH_WRITE_N).map(key).collect();
+    let (_dir, db) = open_db("batch-native");
+    // The same fixture the transactional workloads get, so the writes are overwrites
+    // of keys that already exist, as they are in the Go lane.
+    prefill(&db, BATCH_WRITE_N, value);
+
+    let mut g = c.benchmark_group(format!("BatchWriteNative/{label}"));
+    g.throughput(Throughput::Elements(BATCH_WRITE_N));
+    g.bench_function("batch", |b| {
+        b.iter(|| {
+            let mut batch = WriteBatch::new();
+            for k in &ks {
+                batch.put(k, value);
+            }
+            db.write(batch).expect("batch write");
         })
     });
     g.finish();
@@ -440,8 +488,12 @@ fn bench_txns(c: &mut Criterion, label: &str, value: &[u8]) {
 /// thread owns its own cursor into a distinct shuffled permutation (seeded from
 /// the shared 42-seeded order, rotated by thread index) so the threads do not
 /// all hammer the same key at the same time.
+///
+/// Keys are precomputed outside the measured closure: `format!` is not part of
+/// what this workload measures.
 fn bench_parallel_mixed(c: &mut Criterion, label: &str, db: &Db, value: &[u8]) {
     let order = shuffled(PREFILL_N);
+    let keys: Vec<Vec<u8>> = (0..PREFILL_N).map(key).collect();
     let total = PARALLEL_THREADS * PARALLEL_OPS_PER_THREAD;
 
     let mut g = c.benchmark_group(format!("ParallelMixed/{label}"));
@@ -451,14 +503,15 @@ fn bench_parallel_mixed(c: &mut Criterion, label: &str, db: &Db, value: &[u8]) {
             thread::scope(|s| {
                 for t in 0..PARALLEL_THREADS {
                     let order = &order;
+                    let keys = &keys;
                     s.spawn(move || {
                         let base = (t as usize) * (order.len() / PARALLEL_THREADS as usize);
                         for n in 0..PARALLEL_OPS_PER_THREAD {
-                            let k = key(order[(base + n as usize) % order.len()]);
+                            let k = &keys[order[(base + n as usize) % order.len()] as usize];
                             if n % 10 == 9 {
-                                db.put(&k, value).expect("parallel put");
+                                db.put(k, value).expect("parallel put");
                             } else {
-                                let v = db.get(&k).expect("parallel get");
+                                let v = db.get(k).expect("parallel get");
                                 black_box(v);
                             }
                         }
@@ -476,6 +529,7 @@ fn all(c: &mut Criterion) {
 
         bench_writes(c, label, &value);
         bench_txns(c, label, &value);
+        bench_batch_native(c, label, &value);
 
         // One prefilled fixture shared by every read-shaped workload. Opened and
         // filled here, outside every measured closure.

@@ -216,20 +216,21 @@ func lookupWorkload(name string) (workload, bool) {
 
 // One top-level benchmark per workload, so that names are stable and greppable.
 
-func BenchmarkSeqWrite(b *testing.B)      { runWorkload(b, "SeqWrite") }
-func BenchmarkRandWrite(b *testing.B)     { runWorkload(b, "RandWrite") }
-func BenchmarkGetHit(b *testing.B)        { runWorkload(b, "GetHit") }
-func BenchmarkGetMiss(b *testing.B)       { runWorkload(b, "GetMiss") }
-func BenchmarkHas(b *testing.B)           { runWorkload(b, "Has") }
-func BenchmarkScanAll(b *testing.B)       { runWorkload(b, "ScanAll") }
-func BenchmarkScanAllAppend(b *testing.B) { runWorkload(b, "ScanAllAppend") }
-func BenchmarkScanAllBorrow(b *testing.B) { runWorkload(b, "ScanAllBorrow") }
-func BenchmarkScanReverse(b *testing.B)   { runWorkload(b, "ScanReverse") }
-func BenchmarkScanPrefix(b *testing.B)    { runWorkload(b, "ScanPrefix") }
-func BenchmarkTxnWrite(b *testing.B)      { runWorkload(b, "TxnWrite") }
-func BenchmarkTxnReadWrite(b *testing.B)  { runWorkload(b, "TxnReadWrite") }
-func BenchmarkBatchWrite(b *testing.B)    { runWorkload(b, "BatchWrite") }
-func BenchmarkParallelMixed(b *testing.B) { runWorkload(b, "ParallelMixed") }
+func BenchmarkSeqWrite(b *testing.B)         { runWorkload(b, "SeqWrite") }
+func BenchmarkRandWrite(b *testing.B)        { runWorkload(b, "RandWrite") }
+func BenchmarkGetHit(b *testing.B)           { runWorkload(b, "GetHit") }
+func BenchmarkGetMiss(b *testing.B)          { runWorkload(b, "GetMiss") }
+func BenchmarkHas(b *testing.B)              { runWorkload(b, "Has") }
+func BenchmarkScanAll(b *testing.B)          { runWorkload(b, "ScanAll") }
+func BenchmarkScanAllAppend(b *testing.B)    { runWorkload(b, "ScanAllAppend") }
+func BenchmarkScanAllBorrow(b *testing.B)    { runWorkload(b, "ScanAllBorrow") }
+func BenchmarkScanReverse(b *testing.B)      { runWorkload(b, "ScanReverse") }
+func BenchmarkScanPrefix(b *testing.B)       { runWorkload(b, "ScanPrefix") }
+func BenchmarkTxnWrite(b *testing.B)         { runWorkload(b, "TxnWrite") }
+func BenchmarkTxnReadWrite(b *testing.B)     { runWorkload(b, "TxnReadWrite") }
+func BenchmarkBatchWrite(b *testing.B)       { runWorkload(b, "BatchWrite") }
+func BenchmarkBatchWriteNative(b *testing.B) { runWorkload(b, "BatchWriteNative") }
+func BenchmarkParallelMixed(b *testing.B)    { runWorkload(b, "ParallelMixed") }
 
 // TxnContended is registered once per contention level (the hot-range size), so that the
 // two levels are separate, greppable top-level benchmarks rather than a sub-case of one.

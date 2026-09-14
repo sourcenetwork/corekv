@@ -18,8 +18,15 @@ criterion = "0.5"
 name = "workloads"
 harness = false
 
+# Matches the profile the staticlib the Go lane links is built with
+# (go-regolith `ffi/Cargo.toml`, `[profile.release]`), so the two columns compile the
+# same engine the same way. Without this the bench profile is thin-local LTO across 16
+# codegen units and the Rust column is handicapped for a reason that has nothing to do
+# with the engine.
 [profile.bench]
 opt-level = 3
+lto = true
+codegen-units = 1
 
 [[bench]]
 name = "txncost"

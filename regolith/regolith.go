@@ -32,6 +32,7 @@ package regolith
 
 import (
 	"context"
+	"sync"
 
 	"github.com/sourcenetwork/go-regolith"
 
@@ -40,10 +41,19 @@ import (
 
 type Datastore struct {
 	db *regolith.DB
+
+	// batches holds the packed buffers of batches that have been written, so a store
+	// fed batches of a similar shape stops allocating after the first few: a
+	// [github.com/sourcenetwork/go-regolith.WriteBatch] keeps its buffer across
+	// `Reset`.  They are pooled rather than kept in one field because a WriteBatch is
+	// not safe for concurrent use, and `WriteBatch` may be called from several
+	// goroutines at once.
+	batches sync.Pool
 }
 
 var _ corekv.TxnStore = (*Datastore)(nil)
 var _ corekv.Dropable = (*Datastore)(nil)
+var _ corekv.BatchWriter = (*Datastore)(nil)
 
 // NewDatastore opens (or creates) a regolith store at the given path with the
 // given engine options, following the same shape as the leveldb store's
@@ -62,7 +72,10 @@ func NewDatastore(path string, opts *regolith.Options) (*Datastore, error) {
 	if err != nil {
 		return nil, regolithErrToKVErr(err)
 	}
-	return &Datastore{db: db}, nil
+	return &Datastore{
+		db:      db,
+		batches: sync.Pool{New: func() any { return regolith.NewWriteBatch(0) }},
+	}, nil
 }
 
 func (d *Datastore) Get(ctx context.Context, key []byte) ([]byte, error) {
@@ -105,6 +118,40 @@ func (d *Datastore) Delete(ctx context.Context, key []byte) error {
 	}
 	err := d.db.Delete(key)
 	return regolithErrToKVErr(err)
+}
+
+// WriteBatch implements [corekv.BatchWriter], applying every operation in one crossing
+// of the FFI boundary instead of one crossing per operation.
+//
+// The whole batch lands or none of it does: the engine writes it as a single
+// write-ahead log record.  It takes no snapshot and validates nothing against
+// concurrent writers, and it ignores any transaction held in ctx, exactly as
+// [Datastore.DropAll] does.
+//
+// The engine refuses a batch whose log record would be larger than it can replay,
+// returning [github.com/sourcenetwork/go-regolith.ErrInvalidArgument] with the limit in
+// its detail and writing nothing.  The limit is on bytes, not on the number of
+// operations, so a caller with unbounded input has to split by size.
+func (d *Datastore) WriteBatch(ctx context.Context, ops []corekv.BatchOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+
+	batch := d.batches.Get().(*regolith.WriteBatch) //nolint:forcetypeassert
+	defer func() {
+		batch.Reset()
+		d.batches.Put(batch)
+	}()
+
+	for _, op := range ops {
+		if op.Delete {
+			batch.Delete(op.Key)
+			continue
+		}
+		batch.Set(op.Key, op.Value)
+	}
+
+	return regolithErrToKVErr(d.db.Write(batch))
 }
 
 func (d *Datastore) Iterator(ctx context.Context, iterOpts corekv.IterOptions) (corekv.Iterator, error) {

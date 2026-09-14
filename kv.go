@@ -207,6 +207,60 @@ type Dropable interface {
 	DropAll() error
 }
 
+// BatchOp is a single operation within a batch handed to [BatchWriter.WriteBatch].
+type BatchOp struct {
+	// Key is the key to write to, or to delete.
+	Key []byte
+
+	// Value is the value to store against Key.  It is ignored when Delete is true.
+	Value []byte
+
+	// Delete makes this operation remove the item at Key, mirroring [Writer.Delete],
+	// instead of writing to it, mirroring [Writer.Set].
+	Delete bool
+}
+
+// BatchWriter is an optional interface implemented by some Stores.
+//
+// It allows a caller that already knows every key it wants to change to hand the whole
+// set to the store at once, for stores that can apply it in a single write instead of
+// one write per operation.  Callers should type-assert for it and fall back to
+// [Writer.Set] and [Writer.Delete].
+//
+// It is not a transaction.  Nothing is read, nothing is validated against concurrent
+// writers, no snapshot is taken, no conflict can be reported, and nothing can be rolled
+// back once written.  Callers that need to read what they wrote, or to abandon the
+// writes, want a [Txn].
+type BatchWriter interface {
+	// WriteBatch applies the given operations to the store.
+	//
+	// Operations apply in the order they are given, so the last operation on a key is
+	// the one that survives.  Deleting a key that holds no item is not an error, as in
+	// [Writer.Delete].  An empty or nil `ops` writes nothing and returns nil.
+	//
+	// Atomicity is the implementation's own property, and differs between stores.  The
+	// regolith store applies the whole batch or none of it.  The badger store does not:
+	// badger caps the size of the transaction underneath its batch and starts a new one
+	// when the cap is reached, so a large batch lands as several writes and an error
+	// partway through leaves the operations that already landed in the store.  A caller
+	// that needs all-or-nothing must read the implementation it is holding, or use a
+	// [Txn].
+	//
+	// The batch applies to the store, not to any transaction carried in ctx.  Like
+	// [Dropable.DropAll], an implementation ignores a context transaction; a caller that
+	// wants these writes inside a transaction must use [Writer.Set] and [Writer.Delete]
+	// on it.
+	//
+	// A store may refuse a batch that is too large to apply in one write.  What it
+	// bounds is bytes, not the number of operations, so a caller building a batch from
+	// unbounded input must accumulate key and value bytes up to a budget of its own,
+	// write, and start the next batch.
+	//
+	// The store may read Key and Value until WriteBatch returns and does not retain
+	// either afterwards.  A caller must not modify them while the call is running.
+	WriteBatch(ctx context.Context, ops []BatchOp) error
+}
+
 // Store contains all the functions required for interacting with a store.
 type Store interface {
 	ReaderWriter

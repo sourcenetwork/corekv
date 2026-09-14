@@ -23,6 +23,7 @@ type Datastore struct {
 
 var _ corekv.TxnStore = (*Datastore)(nil)
 var _ corekv.Dropable = (*Datastore)(nil)
+var _ corekv.BatchWriter = (*Datastore)(nil)
 
 func NewDatastore(path string, opts badger.Options) (*Datastore, error) {
 	opts.Dir = path
@@ -98,6 +99,59 @@ func (b *Datastore) Delete(ctx context.Context, key []byte) error {
 	}
 
 	return txn.Commit()
+}
+
+// WriteBatch implements [corekv.BatchWriter] over badger's own WriteBatch.
+//
+// It is NOT atomic as a whole.  badger caps how large the transaction underneath the
+// batch may grow, and commits that transaction and opens a new one as soon as the next
+// operation would cross the cap (badger's `WriteBatch.handleEntry`, on `ErrTxnTooBig`).
+// A batch bigger than one badger transaction therefore lands as several writes, and a
+// failure partway through leaves everything that was already committed in the store.
+// Callers that need all-or-nothing want a [corekv.Txn].
+//
+// Like [Datastore.DropAll] it applies to the store and ignores any transaction held in
+// ctx.
+//
+// A store opened in badger's managed mode cannot use this: badger's NewWriteBatch
+// panics there.  [NewDatastore] never opens one that way; a DB handed to
+// [NewDatastoreFrom] must not be in managed mode.
+//
+// A closed store is checked explicitly, the same way [bTxn.iterator] checks it:
+// badger's own close detection is not enough here.  Flush's internal commit opens a
+// replacement transaction, which waits on a watermark that a closed store's background
+// goroutines will never advance again, so on a closed store Flush hangs forever instead
+// of returning the error it returns from a plain Set.  Checking closed-ness ourselves
+// before ever calling into badger avoids that hang.
+func (b *Datastore) WriteBatch(ctx context.Context, ops []corekv.BatchOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+
+	b.closeLk.RLock()
+	defer b.closeLk.RUnlock()
+	if b.closed {
+		return corekv.ErrDBClosed
+	}
+
+	wb := b.db.NewWriteBatch()
+	// badger's release path when Flush is not reached.  After a successful Flush it is
+	// a no-op: Flush has already finished the throttle and discarded the transaction.
+	defer wb.Cancel()
+
+	for _, op := range ops {
+		var err error
+		if op.Delete {
+			err = wb.Delete(op.Key)
+		} else {
+			err = wb.Set(op.Key, op.Value)
+		}
+		if err != nil {
+			return badgerErrToKVErr(err)
+		}
+	}
+
+	return badgerErrToKVErr(wb.Flush())
 }
 
 func (b *Datastore) Close() error {
