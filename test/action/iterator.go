@@ -167,3 +167,23 @@ func CloseRoot() *IteratorCloseRoot {
 func (a *IteratorCloseRoot) Execute(s *state.State, iterator corekv.Iterator) {
 	a.CloseStore.Execute(s)
 }
+
+// StoreAction executes a store-scoped action whilst the iterator created by
+// the parent [Iterator] action remains open.
+type StoreAction[T Action] struct {
+	Action T
+}
+
+var _ IteratorAction = (*StoreAction[Action])(nil)
+
+// WhileOpen returns a [StoreAction] that executes the given action whilst
+// the iterator created by the parent [Iterator] action remains open.
+func WhileOpen[T Action](action T) *StoreAction[T] {
+	return &StoreAction[T]{
+		Action: action,
+	}
+}
+
+func (a *StoreAction[T]) Execute(s *state.State, _ corekv.Iterator) {
+	a.Action.Execute(s)
+}
