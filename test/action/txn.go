@@ -1,8 +1,6 @@
 package action
 
 import (
-	"github.com/stretchr/testify/require"
-
 	"github.com/sourcenetwork/corekv"
 	"github.com/sourcenetwork/corekv/test/state"
 )
@@ -169,6 +167,9 @@ func (a *DiscardTxn) Execute(s *state.State) {
 // CommitTxn commits the given transaction when executed.
 type CommitTxn struct {
 	ID int
+
+	// The expected error message.
+	ExpectedError string
 }
 
 var _ Action = (*CommitTxn)(nil)
@@ -179,9 +180,17 @@ func Commit() *CommitTxn {
 	return &CommitTxn{}
 }
 
+// CommitE returns a new [CommitTxn] that commits the default (ID: 0) transaction
+// when executed and requires that the returned error contains the given string.
+func CommitE(expectedErr string) *CommitTxn {
+	return &CommitTxn{
+		ExpectedError: expectedErr,
+	}
+}
+
 func (a *CommitTxn) Execute(s *state.State) {
 	txn := s.Txns[a.ID]
 
 	err := txn.Commit()
-	require.NoError(s.T, err)
+	expectError(s, err, a.ExpectedError)
 }

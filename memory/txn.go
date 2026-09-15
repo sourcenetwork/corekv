@@ -21,8 +21,9 @@ import (
 
 // basicTxn implements corekv.Txn
 type basicTxn struct {
-	ops *btree.BTreeG[dsItem]
-	ds  *Datastore
+	ops   *btree.BTreeG[dsItem]
+	reads *btree.BTreeG[dsItem]
+	ds    *Datastore
 	// Version of the datastore when the transaction was initiated.
 	dsVersion *uint64
 	readOnly  bool
@@ -68,18 +69,16 @@ func (t *basicTxn) Delete(ctx context.Context, key []byte) error {
 }
 
 func (t *basicTxn) get(key []byte) dsItem {
-	result := dsItem{}
-	t.ops.Descend(dsItem{key: key, version: t.getTxnVersion()}, func(item dsItem) bool {
-		if bytes.Equal(key, item.key) {
-			result = item
-		}
-		// We only care about the last version so we stop iterating right away by returning false.
-		return false
-	})
+	result := get(t.ops, key, t.getTxnVersion())
+	if result.key == nil {
+		result = get(t.reads, key, t.getDSVersion())
+	}
 	if result.key == nil {
 		result = get(t.ds.values, key, t.getDSVersion())
-		result.isGet = true
-		t.ops.Set(result)
+		if result.key == nil {
+			result = dsItem{key: bytes.Clone(key), isDeleted: true}
+		}
+		t.reads.Set(result)
 	}
 	return result
 }
@@ -198,6 +197,7 @@ func (t *basicTxn) Discard() {
 	}
 
 	t.ops.Clear()
+	t.reads.Clear()
 	t.clearInFlightTxn()
 	t.discarded = true
 }
@@ -226,14 +226,17 @@ func (t *basicTxn) checkForConflicts() error {
 	if t.getDSVersion() == t.ds.getVersion() {
 		return nil
 	}
-	iter := t.ops.Iter()
-	defer iter.Release()
-	for iter.Next() {
-		expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
-		latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
-		if latestItem.version != expectedItem.version {
-			return corekv.ErrTxnConflict
+	for _, items := range []*btree.BTreeG[dsItem]{t.reads, t.ops} {
+		iter := items.Iter()
+		for iter.Next() {
+			expectedItem := get(t.ds.values, iter.Item().key, t.getDSVersion())
+			latestItem := get(t.ds.values, iter.Item().key, t.ds.getVersion())
+			if latestItem.version != expectedItem.version {
+				iter.Release()
+				return corekv.ErrTxnConflict
+			}
 		}
+		iter.Release()
 	}
 	return nil
 }
