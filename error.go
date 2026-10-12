@@ -10,4 +10,5 @@ var (
 	ErrDBClosed     = errors.New("datastore closed")
 	ErrTxnConflict  = errors.New("transaction conflict. Please retry")
 	ErrReadOnlyTxn  = errors.New("read only transaction")
+	ErrTxnTooBig    = errors.New("transaction is too big")
 )
