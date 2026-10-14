@@ -214,6 +214,7 @@ var badgerErrToKVErrMap = map[error]error{
 	badger.ErrDiscardedTxn: corekv.ErrDiscardedTxn,
 	badger.ErrDBClosed:     corekv.ErrDBClosed,
 	badger.ErrConflict:     corekv.ErrTxnConflict,
+	badger.ErrTxnTooBig:    corekv.ErrTxnTooBig,
 }
 
 func badgerErrToKVErr(err error) error {
@@ -234,6 +235,8 @@ func badgerErrToKVErr(err error) error {
 			mappedErr = corekv.ErrNotFound
 		case errors.Is(err, badger.ErrDBClosed):
 			mappedErr = corekv.ErrDBClosed
+		case errors.Is(err, badger.ErrTxnTooBig):
+			mappedErr = corekv.ErrTxnTooBig
 		// Annoyingly, badger's error wrapping seems to break `errors.Is`, so we have to
 		// check the string
 		case strings.Contains(err.Error(), badger.ErrDBClosed.Error()):
